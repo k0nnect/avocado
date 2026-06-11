@@ -156,6 +156,17 @@ export class Commentary {
     return cpLoss > 250;
   }
 
+  /**
+   * Seed the running eval baseline from the position BEFORE any move is judged
+   * (e.g. the board you just opened). Without this, the very first move can't be
+   * assessed (no prior eval to compare against). Produces no callout.
+   */
+  setBaseline(evalCpWhite: number, mateWhite: number): void {
+    this.prevEvalWhite = evalCpWhite;
+    this.prevMateWhite = mateWhite;
+    this.havePrev = true;
+  }
+
   /** Reset between games. */
   reset(): void {
     this.havePrev = false;

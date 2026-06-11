@@ -46,7 +46,8 @@ const DEFAULTS: Settings = {
   commentary: true,
 };
 
-const COMMENTARY_DEPTH = 14; // speak once the best line is this deep
+const COMMENTARY_DEPTH = 12; // speak once the best line is this deep (fast + accurate)
+const DECISIVE_DEPTH = 6; // ...but react to a forced mate even sooner
 
 const ADAPTERS: SiteAdapter[] = [new LichessAdapter(), new ChesscomAdapter()];
 
@@ -71,6 +72,7 @@ class Avocado {
   private board = new Board(); // mirrors the position we last sent the engine
   private pending: CaptureEvent | null = null;
   private spokenForMove = false;
+  private baselineSeeded = false; // commentary baseline taken for this position
   private pvFrames = new Map<number, EvalFrame>(); // multipv → latest frame
 
   async boot(): Promise<void> {
@@ -184,6 +186,7 @@ class Avocado {
   private onMove(e: CaptureEvent): void {
     this.pending = e;
     this.spokenForMove = false;
+    this.baselineSeeded = false;
     this.pvFrames.clear();
     // Mirror the analysed position so we can validate engine moves against it
     // before drawing (rejects impossible arrows from any stale/garbage eval).
@@ -259,18 +262,25 @@ class Avocado {
       );
     }
 
-    // commentary: fire once, when the best line reaches a stable depth — but
-    // only for real moves (move >= 0); the baseline resync position (move = -1)
-    // draws eval/arrows without a callout.
-    if (
-      this.settings.commentary &&
-      !this.spokenForMove &&
-      this.pending.move >= 0 &&
-      f.multipv === 1 &&
-      f.depth >= COMMENTARY_DEPTH
-    ) {
-      this.speak(f, stmIsWhite);
-      this.spokenForMove = true;
+    // commentary: react as soon as the best line is reasonably deep (low
+    // latency) — or immediately on a forced mate. Fires once per move and always
+    // reflects the LATEST eval for the position now on the board.
+    if (f.multipv === 1) {
+      const ready = f.depth >= COMMENTARY_DEPTH || (f.mate && f.depth >= DECISIVE_DEPTH);
+      if (ready) {
+        if (this.pending.move < 0) {
+          // baseline (the position you just opened): seed the eval so the first
+          // real move can be judged against it — no callout.
+          if (!this.baselineSeeded) {
+            const sign = stmIsWhite ? 1 : -1;
+            this.commentary.setBaseline(f.mate ? 0 : f.score * sign, f.mate ? f.score * sign : 0);
+            this.baselineSeeded = true;
+          }
+        } else if (this.settings.commentary && !this.spokenForMove) {
+          this.speak(f, stmIsWhite);
+          this.spokenForMove = true;
+        }
+      }
     }
   }
 

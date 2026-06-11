@@ -320,9 +320,9 @@ export class Overlay {
     // priority badge (#1 = best). Drawn opaque on top, near the arrow tail so it
     // labels which piece to move. Apple system font for the numeral.
     if (label > 0) {
-      const r = edge * 0.2;
-      const bx = x1 + ux * (edge * 0.32);
-      const by = y1 + uy * (edge * 0.32);
+      const r = edge * 0.155;
+      const bx = x1 + ux * (edge * 0.3);
+      const by = y1 + uy * (edge * 0.3);
       ctx.beginPath();
       ctx.arc(bx, by, r, 0, Math.PI * 2);
       ctx.fillStyle = color;
