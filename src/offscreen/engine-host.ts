@@ -55,20 +55,34 @@ chosenEngineUrl().then((engineUrl) => {
   });
 });
 
-// Relay to/from the service worker.
-const port = chrome.runtime.connect({ name: 'avocado-offscreen' });
+// Relay to/from the service worker. The SW is killed after ~30s idle, which
+// disconnects this Port — reconnect immediately (connect() wakes the SW), so
+// command frames keep flowing and eval frames always have a live channel.
+let port: chrome.runtime.Port;
 
-port.onMessage.addListener((msg: { tabId: number; frame: string }) => {
-  activeTabId = msg.tabId;
-  worker.postMessage(msg.frame); // command frame → engine worker
-});
+function connectPort(): void {
+  port = chrome.runtime.connect({ name: 'avocado-offscreen' });
+  port.onMessage.addListener((msg: { tabId: number; frame: string }) => {
+    activeTabId = msg.tabId;
+    worker.postMessage(msg.frame); // command frame → engine worker
+  });
+  port.onDisconnect.addListener(() => {
+    // small delay so we don't spin if the extension is being unloaded
+    setTimeout(connectPort, 250);
+  });
+}
+connectPort();
 
 /** Forward one engine frame to the active tab, surfacing log frames locally. */
 function forward(frame: string): void {
   if (frame.charCodeAt(0) === 108 /* 'l' */ && frame[1] === ':') {
     console.log('avocado engine:', frame.slice(2));
   }
-  port.postMessage({ tabId: activeTabId, frame });
+  try {
+    port.postMessage({ tabId: activeTabId, frame });
+  } catch {
+    /* port mid-reconnect; this frame is superseded by the next depth tick */
+  }
 }
 
 if (evalReader) {

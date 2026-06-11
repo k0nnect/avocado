@@ -59,7 +59,7 @@ function dbg(...args: unknown[]): void {
 class Avocado {
   private adapter!: SiteAdapter;
   private boardEl!: HTMLElement;
-  private port!: chrome.runtime.Port;
+  private port: chrome.runtime.Port | null = null;
   private capture!: CapturePipeline;
   private overlay!: Overlay;
   private commentary = new Commentary();
@@ -90,20 +90,52 @@ class Avocado {
     this.boardEl = board;
     dbg('board found', board.tagName.toLowerCase(), '· context', this.adapter.gameContext());
 
-    this.port = chrome.runtime.connect({ name: 'avocado-content' });
-    this.port.onMessage.addListener((frame: string) => this.onEngineFrame(frame));
+    this.connectPort();
 
     this.overlay = new Overlay(this.adapter, this.boardEl);
     this.overlay.mount();
     this.overlay.setHoverOnly(this.settings.hoverOnly);
 
     // push engine config (multipv/hash/threads — threads decided in the worker)
-    this.port.postMessage(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
+    this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
 
     this.capture = new CapturePipeline(this.adapter, this.boardEl, (e) => this.onMove(e));
     this.capture.start();
 
     this.watchGameOver();
+  }
+
+  /**
+   * Connect (or reconnect) the Port to the service worker. MV3 service workers
+   * are killed after ~30s idle, which disconnects the Port — posting on it then
+   * throws "Attempting to use a disconnected port object". We mark the port dead
+   * on disconnect and lazily reconnect on the next send (chrome.runtime.connect
+   * wakes the service worker back up).
+   */
+  private connectPort(): void {
+    this.port = chrome.runtime.connect({ name: 'avocado-content' });
+    this.port.onMessage.addListener((frame: string) => this.onEngineFrame(frame));
+    this.port.onDisconnect.addListener(() => {
+      dbg('port disconnected (service worker idled) — will reconnect on next send');
+      this.port = null;
+    });
+  }
+
+  /** Post a frame to the engine, transparently reconnecting a dead Port. */
+  private send(frame: string): void {
+    if (!this.port) this.connectPort();
+    try {
+      this.port!.postMessage(frame);
+    } catch {
+      // port died between the check and the post — reconnect once and retry
+      this.connectPort();
+      try {
+        this.port!.postMessage(frame);
+      } catch {
+        dbg('send failed after reconnect — extension reloaded?');
+        this.port = null;
+      }
+    }
   }
 
   private async loadSettings(): Promise<void> {
@@ -120,7 +152,7 @@ class Avocado {
       if (k === 'hoverOnly') this.overlay?.setHoverOnly(this.settings.hoverOnly);
     }
     if (reanalyse) {
-      this.port.postMessage(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
+      this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
     }
   }
 
@@ -158,9 +190,7 @@ class Avocado {
     const safeArrows = this.computeSafeArrows(context);
 
     dbg(e.move < 0 ? 'position (baseline)' : 'move', e.fen, '· ctx', context, '· arrows', safeArrows);
-    this.port.postMessage(
-      encodePosition({ fen: e.fen, context, safeArrows }),
-    );
+    this.send(encodePosition({ fen: e.fen, context, safeArrows }));
   }
 
   /** Is the engine's principal move actually possible on the analysed board? */
