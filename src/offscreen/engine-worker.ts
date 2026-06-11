@@ -29,12 +29,21 @@ import {
 } from '../shared/protocol.ts';
 import { parseInfoLine, parseBestMove } from './uci-parse.ts';
 
-let evalWriter: RingWriter;
+// Eval frames go out via the SAB ring when the offscreen doc is crossOriginIsolated
+// (fast path, no clone per line). When it isn't, SharedArrayBuffer doesn't exist,
+// so we fall back to plain postMessage — slower, but it works everywhere.
+let evalWriter: RingWriter | null = null;
 let engine: Worker; // the Stockfish sub-worker
 let threads = 1;
 let hashMb = 256;
 let multipv = 3;
 let analysing = false;
+
+/** Send a frame to the host: SAB ring if available, else postMessage. */
+function emit(frame: string): void {
+  if (evalWriter) evalWriter.write(frame);
+  else (self as unknown as Worker).postMessage(frame);
+}
 
 // Reused eval frame — mutated and re-encoded per line, never reallocated.
 const frame: EvalFrame = { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, line: '' };
@@ -49,24 +58,45 @@ self.onmessage = (ev: MessageEvent) => {
 };
 
 function init(m: {
-  evalSab: SharedArrayBuffer;
+  evalSab: SharedArrayBuffer | null;
   evalCap: number;
   engineUrl: string;
   hardwareConcurrency: number;
 }): void {
-  evalWriter = new RingWriter({ sab: m.evalSab, capacity: m.evalCap } as RingLayout);
-  threads = Math.max(1, m.hardwareConcurrency - 1);
+  evalWriter = m.evalSab ? new RingWriter({ sab: m.evalSab, capacity: m.evalCap } as RingLayout) : null;
+  // Single-threaded builds ignore the Threads option; for the threaded build use
+  // cores−1. The host already picked the right build for this isolation context.
+  threads = m.engineUrl.includes('single') ? 1 : Math.max(1, m.hardwareConcurrency - 1);
 
   // Spawn the vendored Stockfish. It is a CLASSIC Emscripten worker (UCI over
-  // postMessage); it locates its own .wasm relative to its URL and spawns
-  // pthreads internally. Both inherit the offscreen doc's crossOriginIsolation.
-  engine = new Worker(m.engineUrl);
-  engine.onmessage = (e: MessageEvent) => onEngineLine(typeof e.data === 'string' ? e.data : e.data?.data ?? '');
-  engine.onerror = (e) => console.error('avocado stockfish error:', e.message);
+  // postMessage); it locates its own .wasm relative to its URL and (for the
+  // threaded build) spawns pthreads, which need crossOriginIsolation.
+  try {
+    engine = new Worker(m.engineUrl);
+  } catch (err) {
+    log(`FAILED to construct engine worker: ${(err as Error)?.message ?? err}`);
+    return;
+  }
+  engine.onmessage = (e: MessageEvent) =>
+    onEngineLine(typeof e.data === 'string' ? e.data : (e.data?.data ?? ''));
+  engine.onerror = (e) => {
+    log(`stockfish error: ${e.message}`);
+  };
 
+  log(`engine worker up · ${m.engineUrl.split('/').pop()} · threads=${threads}`);
   // Boot UCI at FULL STRENGTH — no Skill Level / UCI_LimitStrength, ever.
   send('uci');
   applyConfig();
+}
+
+/** Emit a debug log line to the host (host + content surface it). */
+function log(text: string): void {
+  try {
+    emit(`l:${text}`);
+  } catch {
+    /* transport not ready */
+  }
+  console.log('avocado engine:', text);
 }
 
 function send(cmd: string): void {
@@ -119,13 +149,13 @@ function onEngineLine(line: string): void {
 
   const best = parseBestMove(line);
   if (best !== null) {
-    evalWriter.write(encodeBestMove(best));
+    emit(encodeBestMove(best));
     return;
   }
 
   if (parseInfoLine(line, frame)) {
     // If the ring is momentarily full the host is a tick behind; the next depth
     // supersedes this line anyway, so dropping it costs nothing visible.
-    evalWriter.write(encodeEval(frame));
+    emit(encodeEval(frame));
   }
 }

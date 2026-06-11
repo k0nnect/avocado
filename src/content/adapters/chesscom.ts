@@ -31,7 +31,22 @@ export class ChesscomAdapter implements SiteAdapter {
   }
 
   findBoard(): HTMLElement | null {
-    return document.querySelector<HTMLElement>('wc-chess-board, .board');
+    // Try the most specific selectors first (querySelector with a comma-list
+    // returns document-order, not selector-order, so we iterate to keep
+    // priority). A.C.A.S targets `#board-layout-chessboard > .board`; the modern
+    // board is a `<wc-chess-board>` element that also carries class `board`.
+    for (const sel of [
+      'wc-chess-board',
+      '#board-layout-chessboard .board',
+      '#board-single .board',
+      '.board.board-layout-chessboard',
+      'chess-board',
+      '.board',
+    ]) {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (el && el.querySelector('.piece')) return el; // must actually hold pieces
+    }
+    return null;
   }
 
   observeTarget(board: HTMLElement): { target: Node; options: MutationObserverInit } {

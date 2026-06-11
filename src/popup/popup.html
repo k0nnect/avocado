@@ -44,19 +44,6 @@
         background: linear-gradient(90deg, rgba(203, 166, 247, 0.12), transparent);
         border-bottom: 1px solid var(--line);
       }
-      .dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--good);
-        box-shadow: 0 0 6px var(--good);
-        animation: pulse 1.6s ease-in-out infinite;
-      }
-      @keyframes pulse {
-        50% {
-          opacity: 0.35;
-        }
-      }
       .brand {
         font-weight: 700;
         letter-spacing: 2px;
@@ -263,7 +250,6 @@
   </head>
   <body>
     <div class="bar">
-      <span class="dot"></span>
       <span class="brand">avocado</span>
       <span class="ver">v0.1</span>
       <span class="status" id="status">engine ready</span>

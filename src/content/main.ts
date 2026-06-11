@@ -166,8 +166,12 @@ class Avocado {
   }
 
   private onEngineFrame(frame: string): void {
-    if (!this.pending) return;
     const op = opOf(frame);
+    if (op === Op.Log) {
+      dbg('engine:', frame.slice(2));
+      return;
+    }
+    if (!this.pending) return;
     if (op === Op.BestMove) {
       // search ended (rare in infinite mode; happens on game end) — ignore
       decodeBestMove(frame);

@@ -12,23 +12,34 @@
 
 import { createRing, RingReader } from './ring-buffer.ts';
 
-const EVAL_RING = createRing(1 << 16); // 64KB worker → host (multi-pv bursts)
-const evalReader = new RingReader(EVAL_RING);
-
 let activeTabId = -1;
 
 // Which engine build to run. Default: SF18 lite (multi-threaded, SIMD, net
-// embedded — self-contained, no separate NNUE file). Overridable from the popup.
-const DEFAULT_ENGINE = 'stockfish-18-lite.js';
+// embedded — self-contained). The multi-threaded build REQUIRES SharedArrayBuffer,
+// which only exists when this document is crossOriginIsolated. If it isn't, the
+// threaded wasm throws on load and no eval ever flows — so we transparently fall
+// back to the single-threaded build, which works everywhere.
+const THREADED_ENGINE = 'stockfish-18-lite.js';
+const SINGLE_ENGINE = 'stockfish-18-lite-single.js';
+
+const isolated = (self as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
+
+// SAB eval ring only when isolated (SharedArrayBuffer exists). Otherwise the
+// worker streams eval frames back over postMessage and we never touch SAB.
+const EVAL_RING = isolated ? createRing(1 << 16) : null;
+const evalReader = EVAL_RING ? new RingReader(EVAL_RING) : null;
 
 async function chosenEngineUrl(): Promise<string> {
-  let file = DEFAULT_ENGINE;
+  let file = isolated ? THREADED_ENGINE : SINGLE_ENGINE;
   try {
     const { engineBuild } = await chrome.storage.local.get('engineBuild');
     if (typeof engineBuild === 'string' && engineBuild.endsWith('.js')) file = engineBuild;
   } catch {
     /* storage may be unavailable; use default */
   }
+  // Guard: never run a threaded build without SAB — it cannot instantiate.
+  if (!isolated && !file.includes('single')) file = SINGLE_ENGINE;
+  console.log(`avocado engine: crossOriginIsolated=${isolated}, using ${file}`);
   return new URL(`../vendor/stockfish/${file}`, import.meta.url).href;
 }
 
@@ -37,8 +48,8 @@ const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type
 chosenEngineUrl().then((engineUrl) => {
   worker.postMessage({
     type: 'init',
-    evalSab: EVAL_RING.sab,
-    evalCap: EVAL_RING.capacity,
+    evalSab: EVAL_RING ? EVAL_RING.sab : null,
+    evalCap: EVAL_RING ? EVAL_RING.capacity : 0,
     engineUrl,
     hardwareConcurrency: navigator.hardwareConcurrency || 4,
   });
@@ -52,9 +63,23 @@ port.onMessage.addListener((msg: { tabId: number; frame: string }) => {
   worker.postMessage(msg.frame); // command frame → engine worker
 });
 
-function drain(): void {
-  for (let s = evalReader.read(); s !== null; s = evalReader.read()) {
-    port.postMessage({ tabId: activeTabId, frame: s });
+/** Forward one engine frame to the active tab, surfacing log frames locally. */
+function forward(frame: string): void {
+  if (frame.charCodeAt(0) === 108 /* 'l' */ && frame[1] === ':') {
+    console.log('avocado engine:', frame.slice(2));
   }
+  port.postMessage({ tabId: activeTabId, frame });
 }
-setInterval(drain, 8); // ~120Hz; engine info lines arrive far slower
+
+if (evalReader) {
+  // SAB ring: drain on a short timer (engine info lines arrive far slower).
+  const reader = evalReader;
+  setInterval(() => {
+    for (let s = reader.read(); s !== null; s = reader.read()) forward(s);
+  }, 8);
+} else {
+  // postMessage fallback: eval frames arrive as worker messages.
+  worker.onmessage = (e: MessageEvent) => {
+    if (typeof e.data === 'string') forward(e.data);
+  };
+}
