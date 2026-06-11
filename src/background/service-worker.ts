@@ -44,10 +44,30 @@ async function ensureOffscreen(): Promise<void> {
 let offscreenPort: chrome.runtime.Port | null = null;
 // Content-script Ports keyed by tab id, so eval frames route to the right tab.
 const contentPorts = new Map<number, chrome.runtime.Port>();
+// Frames that arrived BEFORE the offscreen document finished booting. Creating
+// the offscreen doc is async, so the very first position/analyse frame would
+// otherwise be dropped (engine never analyses the opening position → no arrows).
+// We buffer per tab and flush the moment the offscreen host connects.
+const pending = new Map<number, string[]>();
+
+function sendToEngine(tabId: number, frame: string): void {
+  if (offscreenPort) {
+    offscreenPort.postMessage({ tabId, frame });
+  } else {
+    const q = pending.get(tabId) ?? [];
+    q.push(frame);
+    pending.set(tabId, q);
+  }
+}
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === 'avocado-offscreen') {
     offscreenPort = port;
+    // flush anything that queued while the offscreen doc was starting up
+    for (const [tabId, frames] of pending) {
+      for (const frame of frames) port.postMessage({ tabId, frame });
+    }
+    pending.clear();
     port.onMessage.addListener((msg: { tabId: number; frame: string }) => {
       // eval/bestmove frames flowing engine → content
       const cp = contentPorts.get(msg.tabId);
@@ -67,7 +87,7 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (frame: string) => {
       // position/analyse/stop frames flowing content → engine
       await ensureOffscreen();
-      offscreenPort?.postMessage({ tabId, frame });
+      sendToEngine(tabId, frame);
     });
     port.onDisconnect.addListener(() => {
       contentPorts.delete(tabId);

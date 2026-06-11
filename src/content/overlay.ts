@@ -215,7 +215,7 @@ export class Overlay {
     ctx.fillRect(x, h - fillH, w, fillH);
 
     // midline
-    ctx.strokeStyle = 'rgba(196,181,253,0.5)';
+    ctx.strokeStyle = 'rgba(218,191,252,0.5)'; // lilac midline
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, h / 2);

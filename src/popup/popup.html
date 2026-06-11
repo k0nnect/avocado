@@ -3,183 +3,330 @@
   <head>
     <meta charset="utf-8" />
     <style>
+      /* avocado · cheat-menu aesthetic · mauve / lilac */
       :root {
-        --bg: #16121f;
-        --panel: #1e1830;
-        --primary: #7c3aed;
-        --mid: #a78bfa;
-        --soft: #c4b5fd;
-        --text: #ede9fe;
-        --dim: #9d8fc4;
-        --bad: #fb7185;
+        --bg: #11111b;
+        --bg2: #181825;
+        --panel: #1e1e2e;
+        --line: #2a2a3c;
+        --mauve: #cba6f7;
+        --lav: #b4befe;
+        --lilac: #dabffc;
+        --pink: #f5c2e7;
+        --text: #cdd6f4;
+        --dim: #9399b2;
+        --bad: #f38ba8;
+        --good: #a6e3a1;
+        --glow: 0 0 8px rgba(203, 166, 247, 0.55);
       }
       * {
         box-sizing: border-box;
       }
       body {
-        width: 280px;
+        width: 286px;
         margin: 0;
-        padding: 14px 16px 18px;
-        background: var(--bg);
+        padding: 0;
+        background:
+          radial-gradient(120% 60% at 50% 0%, rgba(203, 166, 247, 0.08), transparent 60%), var(--bg);
         color: var(--text);
         font-family: 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
-        font-size: 13px;
+        font-size: 12px;
         text-transform: lowercase;
+        border: 1px solid var(--line);
       }
-      h1 {
-        font-size: 18px;
-        margin: 0 0 2px;
-        color: var(--primary);
+
+      /* ── title bar / watermark ───────────────────────────── */
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        background: linear-gradient(90deg, rgba(203, 166, 247, 0.12), transparent);
+        border-bottom: 1px solid var(--line);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--good);
+        box-shadow: 0 0 6px var(--good);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: 2px;
+        color: var(--mauve);
+        text-shadow: var(--glow);
+      }
+      .ver {
+        color: var(--dim);
+        font-size: 10px;
+      }
+      .status {
+        margin-left: auto;
+        color: var(--good);
+        font-size: 10px;
         letter-spacing: 1px;
       }
-      .sub {
+
+      /* ── sections ────────────────────────────────────────── */
+      .sec {
+        padding: 4px 12px 8px;
+      }
+      .sec h2 {
+        margin: 10px 0 4px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        color: var(--lav);
+        text-transform: lowercase;
+      }
+      .sec h2::before {
+        content: '// ';
         color: var(--dim);
-        font-size: 11px;
-        margin-bottom: 14px;
       }
       .row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 7px 0;
-        border-top: 1px solid rgba(124, 58, 237, 0.18);
+        padding: 5px 0;
       }
-      label {
+      .row + .row {
+        border-top: 1px solid rgba(42, 42, 60, 0.55);
+      }
+      label.lbl {
         flex: 1;
         padding-right: 10px;
+        color: var(--text);
       }
+
+      /* numeric inputs + selects */
       select,
       input[type='number'] {
         background: var(--panel);
-        color: var(--text);
-        border: 1px solid var(--primary);
-        border-radius: 6px;
+        color: var(--lilac);
+        border: 1px solid var(--line);
+        border-radius: 4px;
         padding: 3px 6px;
         font-family: inherit;
-        font-size: 12px;
+        font-size: 11px;
         text-transform: lowercase;
-        width: 110px;
+        width: 130px;
+        outline: none;
       }
       input[type='number'] {
-        width: 64px;
+        width: 56px;
+        text-align: right;
       }
-      .switch {
+      select:focus,
+      input:focus {
+        border-color: var(--mauve);
+        box-shadow: var(--glow);
+      }
+
+      /* sliders (value + range) */
+      .slide {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .slide output {
+        min-width: 30px;
+        text-align: right;
+        color: var(--mauve);
+        font-size: 11px;
+      }
+      input[type='range'] {
+        -webkit-appearance: none;
+        width: 116px;
+        height: 4px;
+        background: var(--line);
+        border-radius: 4px;
+        outline: none;
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--mauve);
+        box-shadow: var(--glow);
+        cursor: pointer;
+      }
+
+      /* toggle = a <label> so the whole control is clickable */
+      label.switch {
         position: relative;
         width: 38px;
-        height: 20px;
+        height: 18px;
         flex: 0 0 auto;
+        cursor: pointer;
       }
-      .switch input {
+      label.switch input {
+        position: absolute;
         opacity: 0;
-        width: 0;
-        height: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
       }
       .slider {
         position: absolute;
         inset: 0;
         background: var(--panel);
-        border: 1px solid var(--primary);
-        border-radius: 20px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
         transition: 0.15s;
+        pointer-events: none;
       }
       .slider::before {
         content: '';
         position: absolute;
-        height: 14px;
-        width: 14px;
+        height: 12px;
+        width: 12px;
         left: 2px;
         top: 2px;
-        background: var(--soft);
-        border-radius: 50%;
+        background: var(--dim);
+        border-radius: 2px;
         transition: 0.15s;
       }
-      input:checked + .slider {
-        background: var(--primary);
+      label.switch input:checked + .slider {
+        background: rgba(203, 166, 247, 0.18);
+        border-color: var(--mauve);
+        box-shadow: var(--glow);
       }
-      input:checked + .slider::before {
-        transform: translateX(18px);
-        background: var(--text);
+      label.switch input:checked + .slider::before {
+        transform: translateX(20px);
+        background: var(--mauve);
       }
+
+      /* danger toggle (live-game arrows) */
+      label.switch.danger input:checked + .slider {
+        border-color: var(--bad);
+        box-shadow: 0 0 8px rgba(243, 139, 168, 0.55);
+        background: rgba(243, 139, 168, 0.18);
+      }
+      label.switch.danger input:checked + .slider::before {
+        background: var(--bad);
+      }
+
       .warn {
-        margin-top: 12px;
-        padding: 8px 10px;
-        border: 1px solid var(--bad);
-        border-radius: 8px;
+        margin: 8px 12px 0;
+        padding: 7px 9px;
+        border: 1px solid rgba(243, 139, 168, 0.5);
+        border-radius: 5px;
         color: var(--bad);
-        font-size: 11px;
-        line-height: 1.4;
+        font-size: 10px;
+        line-height: 1.45;
+        background: rgba(243, 139, 168, 0.06);
       }
+
       .actions {
         display: flex;
         gap: 8px;
-        margin-top: 14px;
+        padding: 10px 12px 12px;
       }
       button {
         flex: 1;
         background: var(--panel);
-        color: var(--text);
-        border: 1px solid var(--primary);
-        border-radius: 6px;
+        color: var(--lilac);
+        border: 1px solid var(--line);
+        border-radius: 4px;
         padding: 6px;
         font-family: inherit;
-        font-size: 11px;
+        font-size: 10px;
+        letter-spacing: 0.5px;
         text-transform: lowercase;
         cursor: pointer;
+        transition: 0.12s;
       }
       button:hover {
-        background: var(--primary);
+        border-color: var(--mauve);
+        color: var(--mauve);
+        box-shadow: var(--glow);
+      }
+
+      .foot {
+        padding: 0 12px 10px;
+        color: var(--dim);
+        font-size: 9px;
+        letter-spacing: 1px;
+        display: flex;
+        justify-content: space-between;
       }
     </style>
   </head>
   <body>
-    <h1>avocado</h1>
-    <div class="sub">local engine · violet larp · 100% offline</div>
-
-    <div class="row">
-      <label>commentary</label>
-      <span class="switch"><input type="checkbox" id="commentary" /><span class="slider"></span></span>
+    <div class="bar">
+      <span class="dot"></span>
+      <span class="brand">avocado</span>
+      <span class="ver">v0.1</span>
+      <span class="status" id="status">engine ready</span>
     </div>
 
-    <div class="row">
-      <label>hints only on hover</label>
-      <span class="switch"><input type="checkbox" id="hoverOnly" /><span class="slider"></span></span>
-    </div>
+    <div class="sec">
+      <h2>engine</h2>
+      <div class="row">
+        <label class="lbl" for="engineBuild">build</label>
+        <select id="engineBuild">
+          <option value="stockfish-18-lite.js">sf18 lite · threaded</option>
+          <option value="stockfish-18-lite-single.js">sf18 lite · single</option>
+          <option value="stockfish-18.js">sf18 full net · max</option>
+        </select>
+      </div>
+      <div class="row">
+        <label class="lbl" for="multipv">multi-pv lines</label>
+        <span class="slide">
+          <output id="multipvOut">3</output>
+          <input type="range" id="multipv" min="1" max="4" step="1" />
+        </span>
+      </div>
+      <div class="row">
+        <label class="lbl" for="hashMb">hash</label>
+        <span class="slide">
+          <output id="hashMbOut">256mb</output>
+          <input type="range" id="hashMb" min="16" max="1024" step="16" />
+        </span>
+      </div>
 
-    <div class="row">
-      <label>multi-pv lines</label>
-      <input type="number" id="multipv" min="1" max="4" />
-    </div>
+      <h2>visuals</h2>
+      <div class="row">
+        <label class="lbl">hints only on hover</label>
+        <label class="switch"><input type="checkbox" id="hoverOnly" /><span class="slider"></span></label>
+      </div>
+      <div class="row">
+        <label class="lbl">commentary engine</label>
+        <label class="switch"><input type="checkbox" id="commentary" /><span class="slider"></span></label>
+      </div>
 
-    <div class="row">
-      <label>hash (mb)</label>
-      <input type="number" id="hashMb" min="16" max="1024" step="16" />
-    </div>
-
-    <div class="row">
-      <label>engine build</label>
-      <select id="engineBuild">
-        <option value="stockfish-18-lite.js">sf18 lite · threaded (default)</option>
-        <option value="stockfish-18-lite-single.js">sf18 lite · single thread</option>
-        <option value="stockfish-18.js">sf18 full net · max (vendor first)</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <label>show arrows in live human games</label>
-      <span class="switch"
-        ><input type="checkbox" id="safeArrowsOverride" /><span class="slider"></span
-      ></span>
+      <h2>fair play</h2>
+      <div class="row">
+        <label class="lbl">arrows in live human games</label>
+        <label class="switch danger"
+          ><input type="checkbox" id="safeArrowsOverride" /><span class="slider"></span
+        ></label>
+      </div>
     </div>
 
     <div class="warn">
-      heads up: engine hints during a rated game against a human is cheating on chess.com and
-      lichess and can get your account banned. avocado keeps arrows off in live games unless you
-      flip this. eval bar + commentary always run.
+      engine hints during a rated game vs a human is cheating on chess.com and lichess and can get
+      your account banned. arrows stay off in live games unless you flip this. eval bar + commentary
+      always run.
     </div>
 
     <div class="actions">
-      <button id="export">export settings</button>
-      <button id="import">import settings</button>
+      <button id="export">export cfg</button>
+      <button id="import">import cfg</button>
+    </div>
+
+    <div class="foot">
+      <span>local engine</span>
+      <span>100% offline</span>
     </div>
 
     <script type="module" src="popup.js"></script>

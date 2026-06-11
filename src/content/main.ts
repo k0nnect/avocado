@@ -49,6 +49,13 @@ const COMMENTARY_DEPTH = 14; // speak once the best line is this deep
 
 const ADAPTERS: SiteAdapter[] = [new LichessAdapter(), new ChesscomAdapter()];
 
+// Flip on with `chrome.storage.local.set({ debug: true })` then reload the page
+// to trace the pipeline (board found → position sent → eval received → drawn).
+let DEBUG = false;
+function dbg(...args: unknown[]): void {
+  if (DEBUG) console.log('%c avocado ', 'background:#cba6f7;color:#11111b', ...args);
+}
+
 class Avocado {
   private adapter!: SiteAdapter;
   private boardEl!: HTMLElement;
@@ -74,9 +81,14 @@ class Avocado {
       if (area === 'local') this.onSettingsChanged(changes);
     });
 
+    dbg('booting on', this.adapter.name);
     const board = await this.waitForBoard();
-    if (!board) return;
+    if (!board) {
+      dbg('no board found — giving up');
+      return;
+    }
     this.boardEl = board;
+    dbg('board found', board.tagName.toLowerCase(), '· context', this.adapter.gameContext());
 
     this.port = chrome.runtime.connect({ name: 'avocado-content' });
     this.port.onMessage.addListener((frame: string) => this.onEngineFrame(frame));
@@ -93,8 +105,9 @@ class Avocado {
   }
 
   private async loadSettings(): Promise<void> {
-    const stored = await chrome.storage.local.get(DEFAULTS);
+    const stored = await chrome.storage.local.get({ ...DEFAULTS, debug: false });
     this.settings = { ...DEFAULTS, ...stored } as Settings;
+    DEBUG = (stored as { debug?: boolean }).debug === true;
   }
 
   private onSettingsChanged(changes: { [k: string]: chrome.storage.StorageChange }): void {
@@ -139,6 +152,7 @@ class Avocado {
     const context: GameContext = this.adapter.gameContext();
     const safeArrows = this.computeSafeArrows(context);
 
+    dbg(e.move < 0 ? 'position (baseline)' : 'move', e.fen, '· ctx', context, '· arrows', safeArrows);
     this.port.postMessage(
       encodePosition({ fen: e.fen, context, safeArrows }),
     );
@@ -162,6 +176,7 @@ class Avocado {
     if (op !== Op.Eval) return;
 
     const f = decodeEval(frame);
+    if (this.pvFrames.size === 0) dbg('first eval', `d${f.depth}`, f.mate ? `#${f.score}` : `${f.score}cp`, f.line.split(' ')[0]);
     this.pvFrames.set(f.multipv, f);
 
     // side to move in the analysed position = opponent of the mover
@@ -173,10 +188,13 @@ class Avocado {
     const context = this.adapter.gameContext();
     this.overlay.setEval(frames, this.computeSafeArrows(context), stmIsWhite);
 
-    // commentary: fire once, when the best line reaches a stable depth
+    // commentary: fire once, when the best line reaches a stable depth — but
+    // only for real moves (move >= 0); the baseline resync position (move = -1)
+    // draws eval/arrows without a callout.
     if (
       this.settings.commentary &&
       !this.spokenForMove &&
+      this.pending.move >= 0 &&
       f.multipv === 1 &&
       f.depth >= COMMENTARY_DEPTH
     ) {

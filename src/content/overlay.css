@@ -1,6 +1,6 @@
-/* avocado overlay — lowercase violet. Injected as a content-script stylesheet.
-   Everything is fixed/absolute and pointer-events:none so we never intercept
-   the user's clicks or trigger the page's own layout. */
+/* avocado overlay — lowercase mauve / lilac, cheat-menu styling. Injected as a
+   content-script stylesheet. Everything is fixed/absolute and pointer-events:none
+   so we never intercept clicks or trigger the page's own layout. */
 
 .avocado-canvas {
   position: fixed;
@@ -14,18 +14,20 @@
   position: fixed;
   pointer-events: none;
   z-index: 2147483001;
-  max-width: 320px;
+  max-width: 330px;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(30, 24, 48, 0.92);
-  border: 1px solid #7c3aed;
-  color: #ede9fe;
+  border-radius: 6px;
+  background: rgba(24, 24, 37, 0.94);
+  border: 1px solid #cba6f7;
+  color: #cdd6f4;
   font-family: 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.35;
   text-transform: lowercase;
   letter-spacing: 0.2px;
-  box-shadow: 0 6px 24px rgba(124, 58, 237, 0.35);
+  box-shadow:
+    0 0 12px rgba(203, 166, 247, 0.4),
+    0 6px 24px rgba(0, 0, 0, 0.45);
   opacity: 0;
   transform: translateY(6px);
   transition:
@@ -40,8 +42,14 @@
 }
 
 .avocado-ticker .avocado-tag {
-  color: #a78bfa;
+  color: #b4befe;
   font-size: 11px;
   display: block;
   margin-bottom: 2px;
+  letter-spacing: 1px;
+}
+
+.avocado-ticker .avocado-tag::before {
+  content: '// ';
+  color: #9399b2;
 }

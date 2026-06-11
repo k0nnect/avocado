@@ -29,6 +29,14 @@ const els = {
   engineBuild: $('engineBuild') as HTMLSelectElement,
   safeArrowsOverride: $('safeArrowsOverride') as HTMLInputElement,
 };
+const multipvOut = $('multipvOut') as HTMLOutputElement;
+const hashMbOut = $('hashMbOut') as HTMLOutputElement;
+
+/** Reflect the live slider values into their readout chips. */
+function syncOutputs(): void {
+  multipvOut.textContent = els.multipv.value;
+  hashMbOut.textContent = `${els.hashMb.value}mb`;
+}
 
 async function load(): Promise<void> {
   const s = { ...DEFAULTS, ...(await chrome.storage.local.get(DEFAULTS)) } as Settings;
@@ -38,6 +46,7 @@ async function load(): Promise<void> {
   els.hashMb.value = String(s.hashMb);
   els.engineBuild.value = s.engineBuild;
   els.safeArrowsOverride.checked = s.safeArrowsOverride;
+  syncOutputs();
 }
 
 function read(): Settings {
@@ -59,6 +68,10 @@ function clamp(n: number, lo: number, hi: number, fallback: number): number {
 async function save(): Promise<void> {
   await chrome.storage.local.set(read());
 }
+
+// live slider readouts update on every drag, not just on release
+els.multipv.addEventListener('input', syncOutputs);
+els.hashMb.addEventListener('input', syncOutputs);
 
 for (const el of Object.values(els)) {
   el.addEventListener('change', save);

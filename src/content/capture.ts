@@ -76,7 +76,12 @@ export class CapturePipeline {
     });
   }
 
-  /** Re-read the whole board and treat it as a fresh baseline (no move emitted). */
+  /**
+   * Re-read the whole board and treat it as a fresh baseline. Emits the current
+   * position (move = -1) so the engine analyses it immediately — this is what
+   * makes the eval bar + arrows appear the moment you open a board (analysis,
+   * spectate, or a bot game waiting on your move), not only after the first move.
+   */
   private resync(): void {
     if (!this.adapter.scanBoard(this.boardEl, this.cur)) return;
     this.board.loadMailbox(this.cur);
@@ -86,6 +91,17 @@ export class CapturePipeline {
     this.board.prev.set(this.cur);
     this.synced = true;
     this.sampleClocks();
+
+    // emit the baseline position (move = -1 → no commentary, just eval/arrows)
+    this.sink({
+      fen: this.board.toFen(),
+      move: -1,
+      capturedType: 0,
+      capturedValue: 0,
+      mover: this.board.sideToMove ^ 1, // so consumers read stm = current side
+      clockMs: -1,
+      moveTimeMs: -1,
+    });
   }
 
   private process(): void {

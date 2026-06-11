@@ -1,15 +1,15 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="avocado">
-  <!-- avocado smiley logo · lowercase violet -->
+  <!-- avocado smiley logo · mauve / lilac -->
   <!-- stem -->
-  <path d="M64 16 C66 9 71 6 76 6" stroke="#a78bfa" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M64 16 C66 9 71 6 76 6" stroke="#a87fd4" stroke-width="4" stroke-linecap="round" fill="none"/>
   <!-- body (flesh) -->
-  <path d="M64 14 C42 14 28 42 28 73 C28 101 44 118 64 118 C84 118 100 101 100 73 C100 42 86 14 64 14 Z" fill="#7c3aed"/>
-  <!-- inner flesh ring -->
-  <ellipse cx="64" cy="80" rx="33" ry="34" fill="#a78bfa"/>
+  <path d="M64 14 C42 14 28 42 28 73 C28 101 44 118 64 118 C84 118 100 101 100 73 C100 42 86 14 64 14 Z" fill="#cba6f7"/>
+  <!-- inner flesh rim -->
+  <ellipse cx="64" cy="80" rx="33" ry="34" fill="#a87fd4"/>
   <!-- pit -->
-  <circle cx="64" cy="81" r="25" fill="#c4b5fd"/>
+  <circle cx="64" cy="81" r="25" fill="#e6d6fb"/>
   <!-- smiley face -->
-  <circle cx="55" cy="77" r="3.4" fill="#16121f"/>
-  <circle cx="73" cy="77" r="3.4" fill="#16121f"/>
-  <path d="M52 86 Q64 97 76 86" stroke="#16121f" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+  <circle cx="55" cy="77" r="3.4" fill="#11111b"/>
+  <circle cx="73" cy="77" r="3.4" fill="#11111b"/>
+  <path d="M52 86 Q64 97 76 86" stroke="#11111b" stroke-width="3.6" stroke-linecap="round" fill="none"/>
 </svg>

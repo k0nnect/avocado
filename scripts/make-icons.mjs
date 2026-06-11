@@ -9,12 +9,12 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const out = join(root, 'icons');
 
-// brand palette
-const BG = [22, 18, 31]; // #16121f
-const FLESH = [124, 58, 237]; // #7c3aed
-const MID = [167, 139, 250]; // #a78bfa (inner flesh ring)
-const PIT = [196, 181, 253]; // #c4b5fd
-const FACE = [22, 18, 31]; // smiley face, same as bg
+// brand palette — mauve / lilac
+const BG = [17, 17, 27]; // #11111b
+const FLESH = [203, 166, 247]; // #cba6f7 (mauve body)
+const MID = [168, 127, 212]; // #a87fd4 (darker rim around the pit)
+const PIT = [230, 214, 251]; // #e6d6fb (pale lilac pit)
+const FACE = [17, 17, 27]; // smiley face, same as bg
 
 function crc32(buf) {
   let c = ~0;
