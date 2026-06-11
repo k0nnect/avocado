@@ -28,6 +28,11 @@ export const enum LineCat {
   Dominance, // quietly crushing
   Equal, // dead level
   Filler, // nothing else fired
+  // ── terminal (game-end) states ──
+  Checkmate, // the game just ended in checkmate
+  Stalemate, // the game ended in stalemate
+  TimeWin, // someone flagged — won/lost on time
+  Resign, // a player resigned
 }
 
 // tag = the small violet label shown above the line.
@@ -167,6 +172,42 @@ export const LINES: Readonly<Record<LineCat, LineSet>> = {
   [LineCat.Filler]: {
     tag: 'avocado',
     lines: ['solid. carry on', 'noted. the plan continues', 'fine move, nothing spicy'],
+  },
+  [LineCat.Checkmate]: {
+    tag: 'checkmate',
+    lines: [
+      'checkmate. that is the whole game, gg',
+      'and that is mate! pack it up, we are done here',
+      'king down. flawless finish, buddy',
+      'checkmate, no take-backs. ggwp',
+    ],
+  },
+  [LineCat.Stalemate]: {
+    tag: 'stalemate',
+    lines: [
+      'stalemate?! the great houdini escape, half a point',
+      'no legal moves, not in check — it is a draw, somehow',
+      'snatched a draw from the jaws of defeat, stalemate',
+      'stalemate. the most beautiful half point in chess',
+    ],
+  },
+  [LineCat.TimeWin]: {
+    tag: 'flag',
+    lines: [
+      'the flag falls! won on time, scummy but legal',
+      'time. out. the clock did the work today',
+      'flagged em. a win is a win, buddy',
+      'ran out the clock — gg on time',
+    ],
+  },
+  [LineCat.Resign]: {
+    tag: 'resign',
+    lines: [
+      'dude logged',
+      'and he resigns. dude logged, gg',
+      'resignation. somebody just rage-logged',
+      'gg, the opponent hit the eject button. dude logged',
+    ],
   },
 };
 

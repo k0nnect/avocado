@@ -67,7 +67,8 @@ const frames: EvalFrame[] = [
   { depth: 24, multipv: 3, mate: false, score: 22, wdl: [480, 480, 40], line: 'g1f3 g8f6 c2c4' },
 ];
 overlay.setEval(frames, /* safeArrows */ true, /* stmIsWhite */ true);
-overlay.pushCommentary('absolute positional dominance, buddy', 'dominance');
+overlay.pushCommentary('absolute positional dominance, buddy', 'dominance', 'user');
+overlay.pushCommentary('dude logged', 'resign', 'enemy');
 
 // expose for assertions
 (window as unknown as { _adapter: ChesscomAdapter; _board: HTMLElement })._adapter = adapter;

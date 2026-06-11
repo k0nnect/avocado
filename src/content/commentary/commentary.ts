@@ -71,6 +71,27 @@ export class Commentary {
     return { tag: picked.tag, text: picked.text, cat };
   }
 
+  /**
+   * Terminal game-end callout (checkmate / stalemate / win on time). Fires once
+   * — a `fired` latch stops it repeating while the game-over screen lingers.
+   */
+  private endFired = false;
+  gameEnd(kind: 'checkmate' | 'stalemate' | 'timewin' | 'resign'): Callout | null {
+    if (this.endFired) return null;
+    this.endFired = true;
+    const cat =
+      kind === 'checkmate'
+        ? LineCat.Checkmate
+        : kind === 'stalemate'
+          ? LineCat.Stalemate
+          : kind === 'resign'
+            ? LineCat.Resign
+            : LineCat.TimeWin;
+    this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
+    const picked = pickLine(cat, this.seed);
+    return { tag: picked.tag, text: picked.text, cat };
+  }
+
   /** Map the quantized state to a single category by priority, or null. */
   private classify(input: CommentaryInput): LineCat | null {
     const moverIsWhite = input.mover === WHITE;
@@ -142,5 +163,6 @@ export class Commentary {
     this.prevMateWhite = 0;
     this.lastCatAt.clear();
     this.lastAnyAt = -Infinity;
+    this.endFired = false;
   }
 }

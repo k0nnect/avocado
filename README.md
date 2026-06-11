@@ -28,11 +28,14 @@
 
 avocado is a manifest v3 chrome extension. open a game on lichess or chess.com and it:
 
-- **sees** every move the instant the board changes (no polling),
+- **sees** every move the instant the board changes (no polling) — and ignores mere clicks/selections,
 - **thinks** with stockfish 18 — multi-threaded, simd, full nnue — running entirely on your machine,
-- **shows** a violet eval bar, ranked best-move arrows, and an opponent-reply guess on a canvas overlay,
+- **shows** a mauve eval bar and ranked best-move arrows numbered by priority (**#1** best, **#2**, **#3**),
+  plus a translucent opponent-reply guess — and never draws a move that isn't legal on the board,
 - **talks** — *"wait, is that a juicer??"*, *"oh no, my queen!!"*, *"absolute positional dominance, buddy"* —
-  driven by the real eval swing and tactical motifs, not canned timing.
+  driven by the real eval swing and tactical motifs, with your moves' commentary on your side of the board
+  and the opponent's on theirs,
+- **calls the finish** — checkmate, stalemate, flagging on time, and *"dude logged"* when they resign.
 
 > [!WARNING]
 > **fair play.** engine hints during a rated game against a human are cheating on chess.com and
@@ -45,24 +48,27 @@ avocado is a manifest v3 chrome extension. open a game on lichess or chess.com a
 ## why it's faster than a.c.a.s
 
 a.c.a.s is the inspiration and it's great — but its architecture caps it. avocado clears that ceiling
-on every axis. run the demo yourself: **`npm run bench`** (lowercase violet, of course).
+on every axis. run the demo yourself: **`npm run bench`** (lowercase mauve, of course).
 
 ```
   board → fen  (per move)
-    avocado  ██████████████████████████████████  5.55m ops/s
-    a.c.a.s  ████······························  665k ops/s   → 8.3× faster
+    avocado  ██████████████████████████████████  4.96m ops/s
+    a.c.a.s  ████······························  600k ops/s   → 8.3× faster
 
   move detection (diff two positions)
-    avocado  ██████████████████████████████████  20.6m ops/s
-    a.c.a.s  █·································  502k ops/s   → 41× faster
+    avocado  ██████████████████████████████████  19.0m ops/s
+    a.c.a.s  █·································  471k ops/s   → 40× faster
 
   ipc serialization (per eval frame)
-    avocado  ██████████████████████████████████  5.89m ops/s
-    a.c.a.s  █████████████████·················  3.02m ops/s  → 1.9× faster
+    avocado  ██████████████████████████████████  5.29m ops/s
+    a.c.a.s  ██████████████████················  2.85m ops/s  → 1.9× faster
 
   move-detection allocations    avocado 0 objects  ·  a.c.a.s ~9 objects
   move-detection latency        avocado ~0 ms      ·  a.c.a.s up to 250 ms poll
 ```
+
+move validation and the click/flicker guard run *outside* these hot paths — real moves still emit with
+zero added latency; only the analyse/ipc/parse loops are measured above.
 
 the benchmark runs avocado's **real** modules against a faithful port of a.c.a.s's **actual** code
 (`getBasicFen`, `getBoardSquareChangeAmount`, its json comm bus, its 250ms poll — all cited to line

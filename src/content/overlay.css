@@ -41,6 +41,15 @@
   transform: translateY(0);
 }
 
+/* enemy ticker is anchored above the board: its `top` is set to just above the
+   board's top edge, and translateY(-100%) lifts it so its BOTTOM sits there. */
+.avocado-ticker-enemy {
+  transform: translateY(calc(-100% - 6px));
+}
+.avocado-ticker-enemy.show {
+  transform: translateY(-100%);
+}
+
 .avocado-ticker .avocado-tag {
   color: #b4befe;
   font-size: 11px;

@@ -10,7 +10,8 @@
 // different DOM (data-piece attributes) and are deferred to v2 with
 // fairy-stockfish.
 
-import type { SiteAdapter } from './types.ts';
+import type { SiteAdapter, GameEndKind } from './types.ts';
+import { readGameOver } from './game-result.ts';
 import type { GameContext } from '../../shared/protocol.ts';
 import { makePiece, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
 
@@ -127,6 +128,17 @@ export class ChesscomAdapter implements SiteAdapter {
     const el = document.querySelector(sel);
     if (!el?.textContent) return -1;
     return parseClock(el.textContent);
+  }
+
+  gameResult(): GameEndKind | null {
+    // chess.com shows a game-over modal; the headline + sub-line carry the reason.
+    return readGameOver([
+      '.game-over-modal-content',
+      '[class*="game-over-header"]',
+      '[class*="game-over"] [class*="header"]',
+      '.modal-game-over-component',
+      '.header-title-component',
+    ]);
   }
 }
 

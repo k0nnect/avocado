@@ -10,7 +10,8 @@
 // dividing by the square edge (boardWidth / 8) and accounting for orientation.
 // No allocation in scanBoard beyond reading the live NodeList.
 
-import type { SiteAdapter } from './types.ts';
+import type { SiteAdapter, GameEndKind } from './types.ts';
+import { readGameOver } from './game-result.ts';
 import type { GameContext } from '../../shared/protocol.ts';
 import { makePiece, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
 
@@ -130,6 +131,11 @@ export class LichessAdapter implements SiteAdapter {
     const el = document.querySelector(sel);
     if (!el?.textContent) return -1;
     return parseClock(el.textContent);
+  }
+
+  gameResult(): GameEndKind | null {
+    // lichess shows the outcome in .status (with .result) under the move list.
+    return readGameOver(['.result-wrap .status', '.status', '.game__status']);
   }
 }
 

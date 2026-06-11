@@ -1,6 +1,6 @@
 {
   "name": "avocado",
-  "version": "0.1.0",
+  "version": "v.1.1.1-alpha",
   "private": true,
   "description": "local chess companion — low-latency board capture, local stockfish, streamer commentary",
   "type": "module",

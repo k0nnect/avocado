@@ -18,6 +18,9 @@ import {
   moveFrom,
   moveTo,
   PIECE_VALUE,
+  mailboxEqual,
+  sanePosition,
+  isGeometricallyLegal,
 } from '../shared/board.ts';
 
 export interface CaptureEvent {
@@ -111,38 +114,65 @@ export class CapturePipeline {
       return;
     }
 
+    // FAST PATH — nothing moved. Clicking a piece, selecting it, or showing
+    // move-hint dots mutates the DOM but leaves every piece on its square, so the
+    // mailbox is identical. Ignore it: no re-emit, no flicker. (This is the bug
+    // behind arrows jumping when you just click a piece.)
+    if (mailboxEqual(this.board.prev, this.cur)) return;
+
     const side = this.board.sideToMove;
     diffMailbox(this.board.prev, this.cur, side, this.diff);
-
     if (this.diff.move === -1) {
-      // Try the other side — orientation or our side guess may be stale.
       diffMailbox(this.board.prev, this.cur, side ^ 1, this.diff);
     }
 
-    if (this.diff.move === -1) {
-      // Incoherent change (board flip, new game, takeback). Resync silently.
-      this.resync();
+    // Only accept a clean, geometrically-legal single move that lands on a sane
+    // position. A mid-drag / mid-animation transient (piece briefly off its
+    // square) fails this and is deferred — so we never feed the engine a garbage
+    // FEN that produces impossible "best moves".
+    const m = this.diff.move;
+    if (
+      m >= 0 &&
+      isGeometricallyLegal(this.board.prev, moveFrom(m), moveTo(m)) &&
+      sanePosition(this.cur)
+    ) {
+      this.board.sideToMove = this.diff.mover;
+      this.board.applyMove(m);
+      this.board.prev.set(this.board.squares);
+
+      const mover = this.diff.mover;
+      const moveTimeMs = this.sampleClocks(mover);
+      const capturedValue = this.diff.capturedType ? PIECE_VALUE[this.diff.capturedType]! : 0;
+
+      this.sink({
+        fen: this.board.toFen(),
+        move: m,
+        capturedType: this.diff.capturedType,
+        capturedValue,
+        mover,
+        clockMs: this.lastClock[mover],
+        moveTimeMs,
+      });
       return;
     }
 
-    // Apply against the authoritative Board to keep FEN metadata correct.
-    this.board.sideToMove = this.diff.mover;
-    this.board.applyMove(this.diff.move);
-    this.board.prev.set(this.board.squares);
+    // Position changed but isn't a clean legal move (new game, board flip, or a
+    // transient). Re-baseline only once the board settles, so we don't emit
+    // half-finished states. Debounced — this path never fires for normal moves,
+    // so it adds zero latency to the common case.
+    this.scheduleSettle();
+  }
 
-    const mover = this.diff.mover;
-    const moveTimeMs = this.sampleClocks(mover);
-    const capturedValue = this.diff.capturedType ? PIECE_VALUE[this.diff.capturedType]! : 0;
-
-    this.sink({
-      fen: this.board.toFen(),
-      move: this.diff.move,
-      capturedType: this.diff.capturedType,
-      capturedValue,
-      mover,
-      clockMs: this.lastClock[mover],
-      moveTimeMs,
-    });
+  private settleTimer = 0;
+  /** Wait for the board to stop changing, then re-baseline + emit once. */
+  private scheduleSettle(): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = self.setTimeout(() => {
+      this.settleTimer = 0;
+      if (!this.adapter.scanBoard(this.boardEl, this.cur)) return;
+      if (mailboxEqual(this.board.prev, this.cur) || !sanePosition(this.cur)) return;
+      this.resync();
+    }, 120);
   }
 
   /**

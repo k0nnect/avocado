@@ -45,4 +45,13 @@ export interface SiteAdapter {
    * unknown. Sampled only when a move lands, never polled.
    */
   readClockMs(side: number): number;
+
+  /**
+   * Read the site's game-over UI, if the game has ended. Returns the reason so
+   * the commentary engine can react (checkmate / stalemate / time / resign /
+   * draw), or null while the game is ongoing.
+   */
+  gameResult(): GameEndKind | null;
 }
+
+export type GameEndKind = 'checkmate' | 'stalemate' | 'timewin' | 'resign' | 'draw';

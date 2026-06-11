@@ -23,8 +23,12 @@ interface ArrowPV {
 export class Overlay {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private ticker: HTMLDivElement;
-  private tickerTimer = 0;
+  // Two tickers: the user's commentary sits below their side of the board, the
+  // enemy's above theirs. Which is which depends on board orientation.
+  private tickerBottom: HTMLDivElement; // user side
+  private tickerTop: HTMLDivElement; // enemy side
+  private timerBottom = 0;
+  private timerTop = 0;
 
   private rect: DOMRect;
   private dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -49,8 +53,10 @@ export class Overlay {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'avocado-canvas';
     this.ctx = this.canvas.getContext('2d')!;
-    this.ticker = document.createElement('div');
-    this.ticker.className = 'avocado-ticker';
+    this.tickerBottom = document.createElement('div');
+    this.tickerBottom.className = 'avocado-ticker';
+    this.tickerTop = document.createElement('div');
+    this.tickerTop.className = 'avocado-ticker avocado-ticker-enemy';
     this.rect = this.adapter.boardRect(this.boardEl);
 
     this.resizeObs = new ResizeObserver(() => this.refreshRect());
@@ -58,7 +64,8 @@ export class Overlay {
 
   mount(): void {
     document.body.appendChild(this.canvas);
-    document.body.appendChild(this.ticker);
+    document.body.appendChild(this.tickerBottom);
+    document.body.appendChild(this.tickerTop);
     this.resizeObs.observe(this.boardEl);
     window.addEventListener('scroll', this.refreshRect, { passive: true, capture: true });
     window.addEventListener('resize', this.refreshRect, { passive: true });
@@ -70,7 +77,8 @@ export class Overlay {
     window.removeEventListener('scroll', this.refreshRect, { capture: true } as any);
     window.removeEventListener('resize', this.refreshRect);
     this.canvas.remove();
-    this.ticker.remove();
+    this.tickerBottom.remove();
+    this.tickerTop.remove();
   }
 
   /** Cache the board rect and size the canvas to cover it (+ a left gutter for
@@ -86,9 +94,11 @@ export class Overlay {
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
-    // ticker sits just below the board
-    this.ticker.style.left = `${this.rect.left}px`;
-    this.ticker.style.top = `${this.rect.bottom + 8}px`;
+    // user ticker below the board, enemy ticker above it
+    this.tickerBottom.style.left = `${this.rect.left}px`;
+    this.tickerBottom.style.top = `${this.rect.bottom + 8}px`;
+    this.tickerTop.style.left = `${this.rect.left}px`;
+    this.tickerTop.style.top = `${this.rect.top - 8}px`; // CSS anchors it by its bottom edge
     this.markDirty();
   };
 
@@ -142,19 +152,28 @@ export class Overlay {
     this.markDirty();
   }
 
-  /** Show a commentary line in the ticker; auto-hides after a few seconds. */
-  pushCommentary(text: string, tag?: string): void {
-    this.ticker.textContent = '';
+  /**
+   * Show a commentary line. `side` picks the ticker: 'user' (below the board) or
+   * 'enemy' (above it), so each player's moves get commentary on their own side.
+   */
+  pushCommentary(text: string, tag: string | undefined, side: 'user' | 'enemy'): void {
+    const el = side === 'enemy' ? this.tickerTop : this.tickerBottom;
+    el.textContent = '';
     if (tag) {
       const t = document.createElement('span');
       t.className = 'avocado-tag';
       t.textContent = tag;
-      this.ticker.appendChild(t);
+      el.appendChild(t);
     }
-    this.ticker.appendChild(document.createTextNode(text));
-    this.ticker.classList.add('show');
-    if (this.tickerTimer) clearTimeout(this.tickerTimer);
-    this.tickerTimer = window.setTimeout(() => this.ticker.classList.remove('show'), 4200);
+    el.appendChild(document.createTextNode(text));
+    el.classList.add('show');
+    if (side === 'enemy') {
+      if (this.timerTop) clearTimeout(this.timerTop);
+      this.timerTop = window.setTimeout(() => el.classList.remove('show'), 4200);
+    } else {
+      if (this.timerBottom) clearTimeout(this.timerBottom);
+      this.timerBottom = window.setTimeout(() => el.classList.remove('show'), 4200);
+    }
   }
 
   // ---- render loop ----
@@ -182,13 +201,14 @@ export class Overlay {
     this.drawEvalBar(gutter);
 
     if (this.showArrows && !this.hoverOnly) {
-      // draw weakest → strongest so the best line lands on top
+      // opponent-reply guess first (underneath), then PV lines weakest → strongest
+      if (this.oppArrow) {
+        this.drawArrow(this.oppArrow.from, this.oppArrow.to, OPP_COLOR, gutter, edge, 0.5, 0);
+      }
       for (let i = this.arrows.length - 1; i >= 0; i--) {
         const a = this.arrows[i]!;
-        this.drawArrow(a.from, a.to, PV_COLORS[a.rank] ?? VIOLET.soft, gutter, edge, 1 - a.rank * 0.22);
-      }
-      if (this.oppArrow) {
-        this.drawArrow(this.oppArrow.from, this.oppArrow.to, OPP_COLOR, gutter, edge, 0.5);
+        // rank+1 → #1 is the best move, #2/#3 the alternates
+        this.drawArrow(a.from, a.to, PV_COLORS[a.rank] ?? VIOLET.soft, gutter, edge, 1 - a.rank * 0.22, a.rank + 1);
       }
     }
   }
@@ -241,6 +261,7 @@ export class Overlay {
     gutter: number,
     edge: number,
     alpha: number,
+    label: number,
   ): void {
     const ctx = this.ctx;
     const [x1, y1] = this.squareCenter(from, gutter, edge);
@@ -276,5 +297,25 @@ export class Overlay {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    // priority badge (#1 = best). Drawn opaque on top, near the arrow tail so it
+    // labels which piece to move. Apple system font for the numeral.
+    if (label > 0) {
+      const r = edge * 0.2;
+      const bx = x1 + ux * (edge * 0.32);
+      const by = y1 + uy * (edge * 0.32);
+      ctx.beginPath();
+      ctx.arc(bx, by, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, edge * 0.03);
+      ctx.strokeStyle = '#11111b';
+      ctx.stroke();
+      ctx.fillStyle = '#11111b';
+      ctx.font = `700 ${r * 1.25}px -apple-system, 'SF Pro Text', system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(label), bx, by);
+    }
   }
 }

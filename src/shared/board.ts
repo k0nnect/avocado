@@ -510,3 +510,103 @@ export function diffMailbox(
   out.capturedType = capturedType;
   return out;
 }
+
+// ---- position validation ----------------------------------------------------
+
+/** True if two 64-byte mailboxes hold an identical position. */
+export function mailboxEqual(a: Uint8Array, b: Uint8Array): boolean {
+  for (let i = 0; i < 64; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * Cheap sanity check that a scanned mailbox is a plausible chess position:
+ * exactly one king per side, at most 16 men per side, and no pawns on the back
+ * ranks. Rejects garbage/transient DOM reads before we ever send them to the
+ * engine (a bad scan otherwise yields a nonsense FEN → hallucinated arrows).
+ */
+export function sanePosition(mb: Uint8Array): boolean {
+  let wk = 0;
+  let bk = 0;
+  let w = 0;
+  let b = 0;
+  for (let sq = 0; sq < 64; sq++) {
+    const p = mb[sq]!;
+    if (p === EMPTY) continue;
+    const t = pieceType(p);
+    if (pieceColor(p) === WHITE) {
+      w++;
+      if (t === PieceType.King) wk++;
+    } else {
+      b++;
+      if (t === PieceType.King) bk++;
+    }
+    if (t === PieceType.Pawn && (sq < 8 || sq >= 56)) return false; // pawn on rank 1/8
+  }
+  return wk === 1 && bk === 1 && w <= 16 && b <= 16;
+}
+
+/**
+ * Is `from → to` geometrically possible for whatever piece sits on `from`,
+ * given the raw mailbox? Pseudo-legal only (ignores check/pins), which is all we
+ * need to reject impossible moves like a bishop sliding straight up a file. Used
+ * to filter engine PV arrows against the LIVE board before drawing them.
+ */
+export function isGeometricallyLegal(mb: Uint8Array, from: number, to: number): boolean {
+  if (from === to) return false;
+  const p = mb[from]!;
+  if (p === EMPTY) return false;
+  const color = pieceColor(p);
+  const target = mb[to]!;
+  if (target !== EMPTY && pieceColor(target) === color) return false; // can't take own
+
+  const ff = from & 7;
+  const fr = from >> 3;
+  const tf = to & 7;
+  const tr = to >> 3;
+  const df = tf - ff;
+  const dr = tr - fr;
+  const adf = Math.abs(df);
+  const adr = Math.abs(dr);
+
+  switch (pieceType(p)) {
+    case PieceType.Pawn: {
+      const dir = color === WHITE ? 1 : -1;
+      if (df === 0 && dr === dir && target === EMPTY) return true; // single push
+      if (df === 0 && dr === 2 * dir && target === EMPTY) {
+        const start = color === WHITE ? 1 : 6;
+        const midSq = from + dir * 8;
+        return fr === start && mb[midSq] === EMPTY; // double push, path clear
+      }
+      // diagonal capture (allow empty target for en passant)
+      return adf === 1 && dr === dir;
+    }
+    case PieceType.Knight:
+      return (adf === 1 && adr === 2) || (adf === 2 && adr === 1);
+    case PieceType.Bishop:
+      return adf === adr && pathClear(mb, from, df, dr);
+    case PieceType.Rook:
+      return (df === 0) !== (dr === 0) && pathClear(mb, from, df, dr);
+    case PieceType.Queen:
+      return (adf === adr || (df === 0) !== (dr === 0)) && pathClear(mb, from, df, dr);
+    case PieceType.King:
+      return (adf <= 1 && adr <= 1) || (adr === 0 && adf === 2); // incl. castling
+    default:
+      return false;
+  }
+}
+
+/** All squares strictly between from and from+(df,dr) are empty (sliders). */
+function pathClear(mb: Uint8Array, from: number, df: number, dr: number): boolean {
+  const stepF = Math.sign(df);
+  const stepR = Math.sign(dr);
+  let f = (from & 7) + stepF;
+  let r = (from >> 3) + stepR;
+  const steps = Math.max(Math.abs(df), Math.abs(dr));
+  for (let i = 1; i < steps; i++) {
+    if (mb[r * 8 + f] !== EMPTY) return false;
+    f += stepF;
+    r += stepR;
+  }
+  return true;
+}

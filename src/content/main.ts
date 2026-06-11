@@ -15,7 +15,7 @@ import { CapturePipeline, type CaptureEvent } from './capture.ts';
 import { Overlay } from './overlay.ts';
 import { Commentary } from './commentary/commentary.ts';
 import { detectMotifs } from './commentary/motifs.ts';
-import { Board, WHITE } from '../shared/board.ts';
+import { Board, WHITE, isGeometricallyLegal, algebraicToSquare } from '../shared/board.ts';
 import {
   encodePosition,
   encodeAnalyse,
@@ -102,6 +102,8 @@ class Avocado {
 
     this.capture = new CapturePipeline(this.adapter, this.boardEl, (e) => this.onMove(e));
     this.capture.start();
+
+    this.watchGameOver();
   }
 
   private async loadSettings(): Promise<void> {
@@ -148,6 +150,9 @@ class Avocado {
     this.pending = e;
     this.spokenForMove = false;
     this.pvFrames.clear();
+    // Mirror the analysed position so we can validate engine moves against it
+    // before drawing (rejects impossible arrows from any stale/garbage eval).
+    this.board.loadMailboxFen(e.fen);
 
     const context: GameContext = this.adapter.gameContext();
     const safeArrows = this.computeSafeArrows(context);
@@ -156,6 +161,16 @@ class Avocado {
     this.port.postMessage(
       encodePosition({ fen: e.fen, context, safeArrows }),
     );
+  }
+
+  /** Is the engine's principal move actually possible on the analysed board? */
+  private bestMoveLegal(): boolean {
+    const best = this.pvFrames.get(1);
+    if (!best || best.line.length < 4) return false;
+    // first UCI token, without allocating a split array
+    const from = algebraicToSquare(best.line.slice(0, 2));
+    const to = algebraicToSquare(best.line.slice(2, 4));
+    return isGeometricallyLegal(this.board.squares, from, to);
   }
 
   /** Arrows allowed automatically unless it's the user's live human game. */
@@ -187,6 +202,14 @@ class Avocado {
     const stm = this.pending.mover ^ 1;
     const stmIsWhite = stm === WHITE;
 
+    // Don't draw until the engine's best move is actually possible on the board.
+    // If it isn't, this eval is stale/garbage (e.g. the position changed under
+    // us) — skip it rather than render an impossible arrow.
+    if (!this.bestMoveLegal()) {
+      dbg('skip draw — best move not legal on current board');
+      return;
+    }
+
     // refresh the overlay with the current set of PV lines
     const frames = [...this.pvFrames.values()].sort((a, b) => a.multipv - b.multipv);
     const context = this.adapter.gameContext();
@@ -209,8 +232,7 @@ class Avocado {
 
   private speak(best: EvalFrame, stmIsWhite: boolean): void {
     const e = this.pending!;
-    // rebuild the analysed position so motif detection has the board state
-    this.board.loadMailboxFen(e.fen);
+    // board already mirrors e.fen (loaded in onMove); motif detection reads it
     const motifs = detectMotifs(this.board, e.move, e.mover, e.capturedValue);
 
     const whiteSign = stmIsWhite ? 1 : -1;
@@ -229,7 +251,39 @@ class Avocado {
       },
       performance.now(),
     );
-    if (out) this.overlay.pushCommentary(out.text, out.tag);
+    if (out) this.overlay.pushCommentary(out.text, out.tag, this.sideOf(e.mover));
+  }
+
+  /** Which ticker a move's commentary belongs to: the mover's own side. */
+  private sideOf(mover: number): 'user' | 'enemy' {
+    // orientation: 0 = white on bottom (user is white), 1 = black on bottom.
+    const userColor = this.adapter.orientation(this.boardEl);
+    return mover === userColor ? 'user' : 'enemy';
+  }
+
+  // ---- game-over watch (resign / flag / mate / stalemate) ----
+  private gameOverObs: MutationObserver | null = null;
+  private gameOverTimer = 0;
+
+  private watchGameOver(): void {
+    this.gameOverObs = new MutationObserver(() => {
+      if (this.gameOverTimer) return; // single-flight debounce
+      this.gameOverTimer = self.setTimeout(() => {
+        this.gameOverTimer = 0;
+        this.checkGameOver();
+      }, 400);
+    });
+    this.gameOverObs.observe(document.body, { childList: true, subtree: true });
+  }
+
+  private checkGameOver(): void {
+    const kind = this.adapter.gameResult();
+    if (!kind || kind === 'draw') return; // draw = no callout for now
+    const callout = this.commentary.gameEnd(kind);
+    if (!callout) return;
+    dbg('game over:', kind);
+    // "dude logged" lands on the opponent's side; the rest on the user's side.
+    this.overlay.pushCommentary(callout.text, callout.tag, kind === 'resign' ? 'enemy' : 'user');
   }
 }
 
