@@ -1,5 +1,6 @@
 node_modules/
 dist/
 .DS_Store
+bench/.gen/
 # A.C.A.S source kept locally as read-only reference; it has its own upstream
 A.C.A.S/
