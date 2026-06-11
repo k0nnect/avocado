@@ -50,23 +50,47 @@ export class CapturePipeline {
   private synced = false;
   private lastClock: [number, number] = [-1, -1];
 
+  private watchdog = 0;
+
   constructor(
     private readonly adapter: SiteAdapter,
-    private readonly boardEl: HTMLElement,
+    private boardEl: HTMLElement,
     private readonly sink: CaptureSink,
+    private readonly onReacquire?: (el: HTMLElement) => void,
   ) {}
 
   start(): void {
+    this.attach();
+    // Watchdog: SPAs (chess.com especially) replace the whole board element on a
+    // new game, which orphans our observer — the observer is on a now-detached
+    // node and never fires again, so detection silently dies. A 1s isConnected
+    // check (one boolean, not a poll of the board) re-acquires it. Cheap and only
+    // acts on disconnection.
+    this.watchdog = self.setInterval(() => this.checkConnected(), 1000);
+  }
+
+  private attach(): void {
     const { target, options } = this.adapter.observeTarget(this.boardEl);
     this.observer = new MutationObserver(() => this.onMutations());
     this.observer.observe(target, options);
-    // Prime from the current DOM so we have a baseline to diff against.
+    this.synced = false;
     this.resync();
+  }
+
+  private checkConnected(): void {
+    if (this.boardEl.isConnected) return;
+    const next = this.adapter.findBoard();
+    if (!next || next === this.boardEl) return;
+    this.observer?.disconnect();
+    this.boardEl = next;
+    this.onReacquire?.(next); // let the overlay re-target too
+    this.attach();
   }
 
   stop(): void {
     this.observer?.disconnect();
     this.observer = null;
+    if (this.watchdog) clearInterval(this.watchdog);
   }
 
   /** Coalesce a mutation burst: set the flag, schedule one microtask. */

@@ -104,7 +104,17 @@ class Avocado {
     // push engine config (multipv/hash/threads — threads decided in the worker)
     this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
 
-    this.capture = new CapturePipeline(this.adapter, this.boardEl, (e) => this.onMove(e));
+    this.capture = new CapturePipeline(
+      this.adapter,
+      this.boardEl,
+      (e) => this.onMove(e),
+      (el) => {
+        // board was swapped out by the SPA → re-target overlay + cached ref
+        this.boardEl = el;
+        this.overlay.setBoard(el);
+        dbg('re-acquired board after dom swap');
+      },
+    );
     this.capture.start();
 
     this.watchGameOver();
@@ -238,18 +248,15 @@ class Avocado {
     const stm = this.pending.mover ^ 1;
     const stmIsWhite = stm === WHITE;
 
-    // Don't draw until the engine's best move is actually possible on the board.
-    // If it isn't, this eval is stale/garbage (e.g. the position changed under
-    // us) — skip it rather than render an impossible arrow.
-    if (!this.bestMoveLegal()) {
-      dbg('skip draw — best move not legal on current board');
-      return;
-    }
-
-    // refresh the overlay with the current set of PV lines
+    // refresh the overlay with the current set of PV lines. The eval bar and
+    // commentary always update (so detection stays visible); ARROWS are gated on
+    // the best move being legal on the live board — that's what suppresses an
+    // impossible/stale arrow without hiding everything else.
+    const arrowsOk = this.bestMoveLegal();
+    if (!arrowsOk) dbg('arrows suppressed — best move not legal on current board');
     const frames = [...this.pvFrames.values()].sort((a, b) => a.multipv - b.multipv);
     const context = this.adapter.gameContext();
-    this.overlay.setEval(frames, this.computeSafeArrows(context), stmIsWhite);
+    this.overlay.setEval(frames, this.computeSafeArrows(context) && arrowsOk, stmIsWhite);
 
     // mirror into the picture-in-picture window when it's open
     if (this.pip.isOpen) {

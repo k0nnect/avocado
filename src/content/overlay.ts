@@ -49,7 +49,7 @@ export class Overlay {
 
   constructor(
     private readonly adapter: SiteAdapter,
-    private readonly boardEl: HTMLElement,
+    private boardEl: HTMLElement,
   ) {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'avocado-canvas';
@@ -70,6 +70,14 @@ export class Overlay {
   /** Wire the pop-out button to a handler (opens/closes the PiP window). */
   onPopout(fn: () => void): void {
     this.popoutBtn.addEventListener('click', fn);
+  }
+
+  /** Re-target the overlay onto a new board element (after an SPA swap). */
+  setBoard(el: HTMLElement): void {
+    this.resizeObs.disconnect();
+    this.boardEl = el;
+    this.resizeObs.observe(el);
+    this.refreshRect();
   }
 
   mount(): void {

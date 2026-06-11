@@ -36,18 +36,24 @@ export class ChesscomAdapter implements SiteAdapter {
     // returns document-order, not selector-order, so we iterate to keep
     // priority). A.C.A.S targets `#board-layout-chessboard > .board`; the modern
     // board is a `<wc-chess-board>` element that also carries class `board`.
-    for (const sel of [
+    const selectors = [
       'wc-chess-board',
       '#board-layout-chessboard .board',
       '#board-single .board',
       '.board.board-layout-chessboard',
       'chess-board',
       '.board',
-    ]) {
+    ];
+    let fallback: HTMLElement | null = null;
+    for (const sel of selectors) {
       const el = document.querySelector<HTMLElement>(sel);
-      if (el && el.querySelector('.piece')) return el; // must actually hold pieces
+      if (!el) continue;
+      if (el.querySelector('.piece')) return el; // ideal: already holds pieces
+      fallback ??= el; // a board-like element whose pieces haven't rendered yet
     }
-    return null;
+    // Return the fallback so we start observing now; the capture loop re-syncs as
+    // soon as pieces appear. Never block detection waiting for a perfect match.
+    return fallback;
   }
 
   observeTarget(board: HTMLElement): { target: Node; options: MutationObserverInit } {
