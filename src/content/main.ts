@@ -68,6 +68,11 @@ class Avocado {
   private commentary = new Commentary();
   private settings: Settings = { ...DEFAULTS };
 
+  // engine health
+  private evalSeen = false; // have we received ANY eval frame this session?
+  private lastPositionFrame = ''; // last position sent, for retry
+  private engineWatchdog = 0;
+
   // per-move state
   private board = new Board(); // mirrors the position we last sent the engine
   private pending: CaptureEvent | null = null;
@@ -100,6 +105,7 @@ class Avocado {
     this.overlay.mount();
     this.overlay.setHoverOnly(this.settings.hoverOnly);
     this.overlay.onPopout(() => void this.pip.toggle());
+    this.overlay.setStatus('starting engine…', true);
 
     // push engine config (multipv/hash/threads — threads decided in the worker)
     this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
@@ -206,7 +212,32 @@ class Avocado {
     const safeArrows = this.computeSafeArrows(context);
 
     dbg(e.move < 0 ? 'position (baseline)' : 'move', e.fen, '· ctx', context, '· arrows', safeArrows);
-    this.send(encodePosition({ fen: e.fen, context, safeArrows }));
+    this.lastPositionFrame = encodePosition({ fen: e.fen, context, safeArrows });
+    this.send(this.lastPositionFrame);
+    if (!this.evalSeen) {
+      this.overlay.setStatus('engine thinking…', true);
+      this.armEngineWatchdog();
+    }
+  }
+
+  /**
+   * If the engine hasn't returned an eval a few seconds after we sent a position,
+   * something dropped it (offscreen still booting, lost frame, idled SW). Re-send
+   * the config + position to kick it. Ensures avocado works "no matter what".
+   */
+  private armEngineWatchdog(): void {
+    if (this.engineWatchdog) return;
+    this.engineWatchdog = self.setInterval(() => {
+      if (this.evalSeen) {
+        clearInterval(this.engineWatchdog);
+        this.engineWatchdog = 0;
+        return;
+      }
+      dbg('no eval yet — re-sending config + position to wake the engine');
+      this.overlay.setStatus('engine waking…', true);
+      this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
+      if (this.lastPositionFrame) this.send(this.lastPositionFrame);
+    }, 3000);
   }
 
   /** Is the engine's principal move actually possible on the analysed board? */
@@ -229,7 +260,10 @@ class Avocado {
   private onEngineFrame(frame: string): void {
     const op = opOf(frame);
     if (op === Op.Log) {
-      dbg('engine:', frame.slice(2));
+      const text = frame.slice(2);
+      dbg('engine:', text);
+      // surface engine boot/errors so a wasm failure isn't a silent blank board
+      if (/fail|error|not supported/i.test(text)) this.overlay.setStatus(`engine: ${text}`, true);
       return;
     }
     if (!this.pending) return;
@@ -241,7 +275,14 @@ class Avocado {
     if (op !== Op.Eval) return;
 
     const f = decodeEval(frame);
-    if (this.pvFrames.size === 0) dbg('first eval', `d${f.depth}`, f.mate ? `#${f.score}` : `${f.score}cp`, f.line.split(' ')[0]);
+    if (!this.evalSeen) {
+      this.evalSeen = true;
+      this.overlay.setStatus('live ⚡'); // fades; confirms the engine is alive
+      if (this.engineWatchdog) {
+        clearInterval(this.engineWatchdog);
+        this.engineWatchdog = 0;
+      }
+    }
     this.pvFrames.set(f.multipv, f);
 
     // side to move in the analysed position = opponent of the mover

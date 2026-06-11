@@ -86,3 +86,27 @@
   color: #11111b;
   transform: scale(1.08);
 }
+
+.avocado-status {
+  position: fixed;
+  z-index: 2147483002;
+  pointer-events: none;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: rgba(24, 24, 37, 0.94);
+  border: 1px solid #b4befe;
+  color: #cdd6f4;
+  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+.avocado-status.show {
+  opacity: 1;
+  transform: translateY(0);
+}

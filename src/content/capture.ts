@@ -50,7 +50,7 @@ export class CapturePipeline {
   private synced = false;
   private lastClock: [number, number] = [-1, -1];
 
-  private watchdog = 0;
+  private safety = 0;
 
   constructor(
     private readonly adapter: SiteAdapter,
@@ -61,12 +61,15 @@ export class CapturePipeline {
 
   start(): void {
     this.attach();
-    // Watchdog: SPAs (chess.com especially) replace the whole board element on a
-    // new game, which orphans our observer — the observer is on a now-detached
-    // node and never fires again, so detection silently dies. A 1s isConnected
-    // check (one boolean, not a poll of the board) re-acquires it. Cheap and only
-    // acts on disconnection.
-    this.watchdog = self.setInterval(() => this.checkConnected(), 1000);
+    // Safety loop (250ms). The MutationObserver is the PRIMARY, instant path —
+    // this is only a backstop that guarantees correctness "no matter what":
+    //  - already-active games: scans + emits the existing position immediately
+    //    if the initial resync hadn't yet (board still loading),
+    //  - missed mutations / observer quirks: re-scans and emits on any change,
+    //  - SPA board swaps (chess.com replaces the board on a new game): re-acquires.
+    // It allocates nothing and emits ONLY when the position actually changed
+    // (mailboxEqual guard inside process), so it adds no latency or engine churn.
+    this.safety = self.setInterval(() => this.tick(), 250);
   }
 
   private attach(): void {
@@ -77,20 +80,26 @@ export class CapturePipeline {
     this.resync();
   }
 
-  private checkConnected(): void {
-    if (this.boardEl.isConnected) return;
-    const next = this.adapter.findBoard();
-    if (!next || next === this.boardEl) return;
-    this.observer?.disconnect();
-    this.boardEl = next;
-    this.onReacquire?.(next); // let the overlay re-target too
-    this.attach();
+  private tick(): void {
+    // re-acquire the board if the SPA swapped it out
+    if (!this.boardEl.isConnected) {
+      const next = this.adapter.findBoard();
+      if (next && next !== this.boardEl) {
+        this.observer?.disconnect();
+        this.boardEl = next;
+        this.onReacquire?.(next);
+        this.attach();
+        return;
+      }
+    }
+    // otherwise just re-check the position (no-op unless something changed)
+    this.process();
   }
 
   stop(): void {
     this.observer?.disconnect();
     this.observer = null;
-    if (this.watchdog) clearInterval(this.watchdog);
+    if (this.safety) clearInterval(this.safety);
   }
 
   /** Coalesce a mutation burst: set the flag, schedule one microtask. */

@@ -30,6 +30,8 @@ export class Overlay {
   private timerBottom = 0;
   private timerTop = 0;
   private popoutBtn: HTMLButtonElement;
+  private statusEl: HTMLDivElement;
+  private statusTimer = 0;
 
   private rect: DOMRect;
   private dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -62,6 +64,8 @@ export class Overlay {
     this.popoutBtn.className = 'avocado-popout';
     this.popoutBtn.textContent = '⧉';
     this.popoutBtn.title = 'pop out to picture-in-picture';
+    this.statusEl = document.createElement('div');
+    this.statusEl.className = 'avocado-status';
     this.rect = this.adapter.boardRect(this.boardEl);
 
     this.resizeObs = new ResizeObserver(() => this.refreshRect());
@@ -85,6 +89,7 @@ export class Overlay {
     document.body.appendChild(this.tickerBottom);
     document.body.appendChild(this.tickerTop);
     document.body.appendChild(this.popoutBtn);
+    document.body.appendChild(this.statusEl);
     this.resizeObs.observe(this.boardEl);
     window.addEventListener('scroll', this.refreshRect, { passive: true, capture: true });
     window.addEventListener('resize', this.refreshRect, { passive: true });
@@ -99,6 +104,21 @@ export class Overlay {
     this.tickerBottom.remove();
     this.tickerTop.remove();
     this.popoutBtn.remove();
+    this.statusEl.remove();
+  }
+
+  /**
+   * Show a small status pill near the board ("scanning…", "thinking…", engine
+   * errors). `sticky` keeps it until the next call; otherwise it fades after 2.5s.
+   * Makes a stalled pipeline visible instead of a silent blank board.
+   */
+  setStatus(text: string, sticky = false): void {
+    this.statusEl.textContent = text;
+    this.statusEl.classList.add('show');
+    if (this.statusTimer) clearTimeout(this.statusTimer);
+    if (!sticky) {
+      this.statusTimer = window.setTimeout(() => this.statusEl.classList.remove('show'), 2500);
+    }
   }
 
   /** Cache the board rect and size the canvas to cover it (+ a left gutter for
@@ -126,6 +146,9 @@ export class Overlay {
     // pop-out button: top-right corner just outside the board
     this.popoutBtn.style.left = `${this.rect.right - 30}px`;
     this.popoutBtn.style.top = `${this.rect.top - 26}px`;
+    // status pill: under the pop-out button, right-aligned
+    this.statusEl.style.right = `${Math.max(0, window.innerWidth - this.rect.right)}px`;
+    this.statusEl.style.top = `${this.rect.top + 4}px`;
     this.markDirty();
   };
 
