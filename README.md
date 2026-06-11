@@ -1,8 +1,19 @@
 <div align="center">
 
-# 🥑 avocado
+```
+       .-"""-.
+     .'       '.
+    /   .---.   \
+   |   / o o \   |
+   |   \  ‿  /   |
+    \   '---'   /
+     '.       .'
+       '-...-'
+```
 
-**`local chess companion · violet larp · 100% offline`**
+# avocado
+
+**`local chess companion · live commentary engine · 100% offline`**
 
 *a low-latency chess overlay that watches your board, thinks with a fully-local stockfish 18,*
 *and talks like a hype streamer — rebuilt from [a.c.a.s] to run multi-threaded where a.c.a.s can't.*
@@ -151,7 +162,7 @@ open `lichess.org/analysis` or a chess.com bot game and start playing.
 
 <div align="center">
 
-`built for microsecond pipelines and maximum larp` · 🥑
+<img src="icons/logo.svg" width="22" alt="avocado" /> &nbsp; `built for microsecond pipelines and a loud commentary engine`
 
 </div>
 

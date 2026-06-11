@@ -12,7 +12,9 @@ const out = join(root, 'icons');
 // brand palette
 const BG = [22, 18, 31]; // #16121f
 const FLESH = [124, 58, 237]; // #7c3aed
+const MID = [167, 139, 250]; // #a78bfa (inner flesh ring)
 const PIT = [196, 181, 253]; // #c4b5fd
+const FACE = [22, 18, 31]; // smiley face, same as bg
 
 function crc32(buf) {
   let c = ~0;
@@ -50,10 +52,36 @@ function png(size) {
       if (r2 <= 1) {
         col = FLESH;
         a = 255;
-        // pit
-        const pdx = (x - cx) / (size * 0.16);
-        const pdy = (y - cy + size * 0.04) / (size * 0.16);
-        if (pdx * pdx + pdy * pdy <= 1) col = PIT;
+
+        const pcy = cy - size * 0.04; // pit center (sits a touch low)
+        const pr = size * 0.16; // pit radius
+
+        // inner flesh ring around the pit
+        const mdx = (x - cx) / (size * 0.205);
+        const mdy = (y - pcy) / (size * 0.205);
+        if (mdx * mdx + mdy * mdy <= 1) col = MID;
+
+        // pit + smiley face
+        const pdx = (x - cx) / pr;
+        const pdy = (y - pcy) / pr;
+        if (pdx * pdx + pdy * pdy <= 1) {
+          col = PIT;
+
+          // eyes
+          const eyeR = pr * 0.2;
+          const eyeY = pcy - pr * 0.28;
+          const eyeDX = pr * 0.42;
+          const lE = (x - (cx - eyeDX)) ** 2 + (y - eyeY) ** 2;
+          const rE = (x - (cx + eyeDX)) ** 2 + (y - eyeY) ** 2;
+          if (lE <= eyeR * eyeR || rE <= eyeR * eyeR) col = FACE;
+
+          // smile: lower arc of a circle centred just above the pit middle
+          const scy = pcy - pr * 0.12;
+          const sr = pr * 0.52;
+          const t = Math.max(1, size * 0.02);
+          const d = Math.hypot(x - cx, y - scy);
+          if (Math.abs(d - sr) < t && y > scy && Math.abs(x - cx) < sr * 0.95) col = FACE;
+        }
       }
       raw[p++] = col[0];
       raw[p++] = col[1];
