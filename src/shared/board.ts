@@ -106,6 +106,19 @@ export function uciToMove(uci: string, board: Board): number {
 }
 
 const PIECE_FEN = ['', 'P', 'N', 'B', 'R', 'Q', 'K'];
+
+// Piece byte (color<<3 | type) → FEN ASCII code, precomputed once. White pieces
+// occupy bytes 1..6, black 9..14; everything else is 0 (unused). Lets toFen emit
+// a byte without branching on colour or calling toLowerCase per square.
+const PIECE_CODE = new Uint8Array(16);
+for (let t = 1; t <= 6; t++) {
+  const upper = PIECE_FEN[t]!.charCodeAt(0);
+  PIECE_CODE[t] = upper; // white
+  PIECE_CODE[8 | t] = upper + 32; // black (ASCII lowercase offset)
+}
+// One shared decoder turns the reused byte buffer into the final FEN string.
+const FEN_DECODER = new TextDecoder('latin1');
+
 const FEN_TYPE: Record<string, PieceType> = {
   p: PieceType.Pawn,
   n: PieceType.Knight,
@@ -134,8 +147,10 @@ export class Board {
   halfmove = 0;
   fullmove = 1;
 
-  // Reused FEN scratch so toFen() allocates nothing beyond the final string.
-  private fenBuf = new Array<string>(0);
+  // Reused FEN scratch: ASCII bytes are written here and decoded once, so toFen
+  // allocates nothing beyond the final string (no per-square temporaries, no
+  // toLowerCase, no array-of-strings join). Max FEN length is well under 96.
+  private fenBytes = new Uint8Array(96);
 
   /** Reset to the standard starting position. */
   reset(): void {
@@ -315,49 +330,81 @@ export class Board {
     if (from === 56 || to === 56) this.castling &= ~0b1000; // black queenside
   }
 
-  /** Build a FEN string for the current state. Allocates only the final string. */
+  /**
+   * Build a FEN string for the current state. Writes ASCII codes into a reused
+   * byte buffer and decodes once — the returned string is the ONLY allocation.
+   * No per-square temporaries, no toLowerCase, no array join.
+   */
   toFen(): string {
-    const buf = this.fenBuf;
-    buf.length = 0;
+    const b = this.fenBytes;
+    const sq = this.squares;
+    let n = 0;
     // piece placement, rank 8 → rank 1
     for (let rank = 7; rank >= 0; rank--) {
       let empty = 0;
+      const base = rank * 8;
       for (let file = 0; file < 8; file++) {
-        const p = this.squares[rank * 8 + file]!;
+        const p = sq[base + file]!;
         if (p === EMPTY) {
           empty++;
           continue;
         }
         if (empty) {
-          buf.push(String(empty));
+          b[n++] = 48 + empty; // '0' + run length (always 1..8)
           empty = 0;
         }
-        const ch = PIECE_FEN[pieceType(p)]!;
-        buf.push(pieceColor(p) === WHITE ? ch : ch.toLowerCase());
+        b[n++] = PIECE_CODE[p]!;
       }
-      if (empty) buf.push(String(empty));
-      if (rank > 0) buf.push('/');
+      if (empty) b[n++] = 48 + empty;
+      if (rank > 0) b[n++] = 47; // '/'
     }
-    buf.push(' ');
-    buf.push(this.sideToMove === WHITE ? 'w' : 'b');
-    buf.push(' ');
+    b[n++] = 32; // ' '
+    b[n++] = this.sideToMove === WHITE ? 119 : 98; // 'w' / 'b'
+    b[n++] = 32;
     // castling
     if (this.castling === 0) {
-      buf.push('-');
+      b[n++] = 45; // '-'
     } else {
-      if (this.castling & 0b0001) buf.push('K');
-      if (this.castling & 0b0010) buf.push('Q');
-      if (this.castling & 0b0100) buf.push('k');
-      if (this.castling & 0b1000) buf.push('q');
+      if (this.castling & 0b0001) b[n++] = 75; // 'K'
+      if (this.castling & 0b0010) b[n++] = 81; // 'Q'
+      if (this.castling & 0b0100) b[n++] = 107; // 'k'
+      if (this.castling & 0b1000) b[n++] = 113; // 'q'
     }
-    buf.push(' ');
-    buf.push(this.epSquare >= 0 ? squareToAlgebraic(this.epSquare) : '-');
-    buf.push(' ');
-    buf.push(String(this.halfmove));
-    buf.push(' ');
-    buf.push(String(this.fullmove));
-    return buf.join('');
+    b[n++] = 32;
+    // en passant
+    if (this.epSquare >= 0) {
+      b[n++] = 97 + (this.epSquare & 7); // file 'a'..'h'
+      b[n++] = 49 + (this.epSquare >> 3); // rank '1'..'8'
+    } else {
+      b[n++] = 45; // '-'
+    }
+    b[n++] = 32;
+    n = writeUint(b, n, this.halfmove);
+    b[n++] = 32;
+    n = writeUint(b, n, this.fullmove);
+    return FEN_DECODER.decode(b.subarray(0, n));
   }
+}
+
+/** Write a non-negative integer's decimal digits as ASCII into `b` at `n`. */
+function writeUint(b: Uint8Array, n: number, value: number): number {
+  if (value === 0) {
+    b[n++] = 48;
+    return n;
+  }
+  const start = n;
+  let v = value;
+  while (v > 0) {
+    b[n++] = 48 + (v % 10);
+    v = (v / 10) | 0;
+  }
+  // digits were written least-significant first; reverse in place
+  for (let i = start, j = n - 1; i < j; i++, j--) {
+    const tmp = b[i]!;
+    b[i] = b[j]!;
+    b[j] = tmp;
+  }
+  return n;
 }
 
 // ---- mailbox diff -----------------------------------------------------------

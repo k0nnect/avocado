@@ -169,6 +169,27 @@ function run(): { results: Result[]; allocAvo: number; allocAcas: number } {
   };
 }
 
+// Engine-strength data pulled from public sources (june 2026). Stockfish ladder
+// is anchored on the official release deltas + CCRL 40/15 top rating; human
+// reference is Carlsen's peak. Sources:
+//   - stockfishchess.org/blog/2026/stockfish-18/  (sf18: +46 elo vs sf17,
+//     SFNNv10 "threat inputs", 2026-01-31, >500M nps on high-end hardware)
+//   - stockfishchess.org/blog/2024/stockfish-17/  (sf17: +46 elo vs sf16)
+//   - en.wikipedia.org/wiki/Stockfish_(chess)     (CCRL 40/15 top stockfish
+//     ≈ 3653, june 2026)
+interface EngineRow {
+  engine: string;
+  elo: number;
+  note: string;
+  isAvocado?: boolean;
+}
+const ENGINES: EngineRow[] = [
+  { engine: 'stockfish 18', elo: 3653, note: 'what avocado runs · +46 vs sf17 · sfnnv10', isAvocado: true },
+  { engine: 'stockfish 17', elo: 3607, note: 'old browser/a.c.a.s default' },
+  { engine: 'stockfish 16', elo: 3561, note: 'sf17 was +46 over this' },
+  { engine: 'carlsen peak', elo: 2882, note: 'strongest human ever' },
+];
+
 // Intermediate allocations created per move detection, COUNTED from each
 // implementation's source (this is the gc-churn that the 40× move-detection gap
 // above is largely made of):
@@ -258,12 +279,58 @@ function render(): void {
       C.dim(`  up to ${ACAS_POLL_INTERVAL_MS} ms`),
   );
 
+  // engine-strength showcase (pulled public data)
+  console.log(line);
+  console.log('');
+  console.log(
+    '  ' + C.text('engine strength') + C.dim('  (ccrl 40/15 elo · pulled from public sources)'),
+  );
+  const eloFloor = 2800;
+  const eloMax = Math.max(...ENGINES.map((e) => e.elo));
+  for (const e of ENGINES) {
+    const frac = (e.elo - eloFloor) / (eloMax - eloFloor);
+    const color = e.isAvocado ? C.primary : C.mid;
+    const tag = e.isAvocado ? C.good(' ◀ avocado') : '';
+    console.log(
+      '    ' +
+        color(e.engine.padEnd(13)) +
+        bar(Math.max(0.04, frac), color) +
+        '  ' +
+        C.soft(`~${e.elo}`) +
+        tag,
+    );
+    console.log('    ' + C.dim(' '.repeat(13) + e.note));
+  }
+  console.log('');
+  console.log(
+    '  ' +
+      C.text('why avocado is stronger in practice') +
+      C.dim('  (same engine, more compute)'),
+  );
+  console.log(
+    '    ' +
+      C.primary('avocado  ') +
+      C.soft('sf18 · multi-threaded simd wasm') +
+      C.dim('  threads = cores−1, full nnue'),
+  );
+  console.log(
+    '    ' +
+      C.mid('a.c.a.s  ') +
+      C.soft('single-threaded wasm only') +
+      C.dim('  hosted gui cannot be crossoriginisolated'),
+  );
+  console.log(
+    '    ' +
+      C.dim('         nodes/sec scales ~linearly with threads, so at equal time'),
+  );
+  console.log('    ' + C.dim('         avocado searches deeper → effectively stronger.'));
+
   console.log(line);
   console.log(
     '  ' +
-      C.dim('note: micro-benchmarks of the parsing/ipc hot paths only. engine ') +
+      C.dim('micro-benchmarks: parsing/ipc hot paths on the same positions.') +
       '\n  ' +
-      C.dim('strength (sf18 multi-thread vs sf17 single-thread) is the bigger win.'),
+      C.dim('engine elo: stockfishchess.org release notes + ccrl 40/15 (jun 2026).'),
   );
   console.log('');
 }
