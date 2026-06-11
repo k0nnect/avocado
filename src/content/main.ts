@@ -13,6 +13,7 @@ import { ChesscomAdapter } from './adapters/chesscom.ts';
 import type { SiteAdapter } from './adapters/types.ts';
 import { CapturePipeline, type CaptureEvent } from './capture.ts';
 import { Overlay } from './overlay.ts';
+import { PipController } from './pip.ts';
 import { Commentary } from './commentary/commentary.ts';
 import { detectMotifs } from './commentary/motifs.ts';
 import { Board, WHITE, isGeometricallyLegal, algebraicToSquare } from '../shared/board.ts';
@@ -62,6 +63,7 @@ class Avocado {
   private port: chrome.runtime.Port | null = null;
   private capture!: CapturePipeline;
   private overlay!: Overlay;
+  private pip = new PipController();
   private commentary = new Commentary();
   private settings: Settings = { ...DEFAULTS };
 
@@ -95,6 +97,7 @@ class Avocado {
     this.overlay = new Overlay(this.adapter, this.boardEl);
     this.overlay.mount();
     this.overlay.setHoverOnly(this.settings.hoverOnly);
+    this.overlay.onPopout(() => void this.pip.toggle());
 
     // push engine config (multipv/hash/threads — threads decided in the worker)
     this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
@@ -245,6 +248,17 @@ class Avocado {
     const context = this.adapter.gameContext();
     this.overlay.setEval(frames, this.computeSafeArrows(context), stmIsWhite);
 
+    // mirror into the picture-in-picture window when it's open
+    if (this.pip.isOpen) {
+      const best = this.pvFrames.get(1)!;
+      this.pip.setEval(
+        frames,
+        this.board.squares,
+        this.adapter.orientation(this.boardEl),
+        evalText(best, stmIsWhite),
+      );
+    }
+
     // commentary: fire once, when the best line reaches a stable depth — but
     // only for real moves (move >= 0); the baseline resync position (move = -1)
     // draws eval/arrows without a callout.
@@ -281,7 +295,11 @@ class Avocado {
       },
       performance.now(),
     );
-    if (out) this.overlay.pushCommentary(out.text, out.tag, this.sideOf(e.mover));
+    if (out) {
+      const side = this.sideOf(e.mover);
+      this.overlay.pushCommentary(out.text, out.tag, side);
+      if (this.pip.isOpen) this.pip.pushCommentary(out.text, out.tag, side);
+    }
   }
 
   /** Which ticker a move's commentary belongs to: the mover's own side. */
@@ -313,8 +331,21 @@ class Avocado {
     if (!callout) return;
     dbg('game over:', kind);
     // "dude logged" lands on the opponent's side; the rest on the user's side.
-    this.overlay.pushCommentary(callout.text, callout.tag, kind === 'resign' ? 'enemy' : 'user');
+    const side = kind === 'resign' ? 'enemy' : 'user';
+    this.overlay.pushCommentary(callout.text, callout.tag, side);
+    if (this.pip.isOpen) this.pip.pushCommentary(callout.text, callout.tag, side);
   }
+}
+
+/** Format an eval frame as a compact white-POV label, e.g. "+0.37" or "M3". */
+function evalText(best: EvalFrame, stmIsWhite: boolean): string {
+  const sign = stmIsWhite ? 1 : -1;
+  if (best.mate) {
+    const m = best.score * sign; // white-POV mate distance
+    return m >= 0 ? `M${m}` : `-M${-m}`;
+  }
+  const cp = (best.score * sign) / 100;
+  return `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}`;
 }
 
 // content script runs at document_start; kick off once the DOM is usable.

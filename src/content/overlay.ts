@@ -29,6 +29,7 @@ export class Overlay {
   private tickerTop: HTMLDivElement; // enemy side
   private timerBottom = 0;
   private timerTop = 0;
+  private popoutBtn: HTMLButtonElement;
 
   private rect: DOMRect;
   private dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -57,15 +58,25 @@ export class Overlay {
     this.tickerBottom.className = 'avocado-ticker';
     this.tickerTop = document.createElement('div');
     this.tickerTop.className = 'avocado-ticker avocado-ticker-enemy';
+    this.popoutBtn = document.createElement('button');
+    this.popoutBtn.className = 'avocado-popout';
+    this.popoutBtn.textContent = '⧉';
+    this.popoutBtn.title = 'pop out to picture-in-picture';
     this.rect = this.adapter.boardRect(this.boardEl);
 
     this.resizeObs = new ResizeObserver(() => this.refreshRect());
+  }
+
+  /** Wire the pop-out button to a handler (opens/closes the PiP window). */
+  onPopout(fn: () => void): void {
+    this.popoutBtn.addEventListener('click', fn);
   }
 
   mount(): void {
     document.body.appendChild(this.canvas);
     document.body.appendChild(this.tickerBottom);
     document.body.appendChild(this.tickerTop);
+    document.body.appendChild(this.popoutBtn);
     this.resizeObs.observe(this.boardEl);
     window.addEventListener('scroll', this.refreshRect, { passive: true, capture: true });
     window.addEventListener('resize', this.refreshRect, { passive: true });
@@ -79,6 +90,7 @@ export class Overlay {
     this.canvas.remove();
     this.tickerBottom.remove();
     this.tickerTop.remove();
+    this.popoutBtn.remove();
   }
 
   /** Cache the board rect and size the canvas to cover it (+ a left gutter for
@@ -94,11 +106,18 @@ export class Overlay {
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
-    // user ticker below the board, enemy ticker above it
-    this.tickerBottom.style.left = `${this.rect.left}px`;
+    // Tickers: user below the board, enemy above it. Right-aligned to the board's
+    // right edge so they clear the player avatar + name, which sit on the left.
+    const rightPx = Math.max(0, window.innerWidth - this.rect.right);
+    this.tickerBottom.style.left = 'auto';
+    this.tickerBottom.style.right = `${rightPx}px`;
     this.tickerBottom.style.top = `${this.rect.bottom + 8}px`;
-    this.tickerTop.style.left = `${this.rect.left}px`;
+    this.tickerTop.style.left = 'auto';
+    this.tickerTop.style.right = `${rightPx}px`;
     this.tickerTop.style.top = `${this.rect.top - 8}px`; // CSS anchors it by its bottom edge
+    // pop-out button: top-right corner just outside the board
+    this.popoutBtn.style.left = `${this.rect.right - 30}px`;
+    this.popoutBtn.style.top = `${this.rect.top - 26}px`;
     this.markDirty();
   };
 

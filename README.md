@@ -35,7 +35,9 @@ avocado is a manifest v3 chrome extension. open a game on lichess or chess.com a
 - **talks** — *"wait, is that a juicer??"*, *"oh no, my queen!!"*, *"absolute positional dominance, buddy"* —
   driven by the real eval swing and tactical motifs, with your moves' commentary on your side of the board
   and the opponent's on theirs,
-- **calls the finish** — checkmate, stalemate, flagging on time, and *"dude logged"* when they resign.
+- **calls the finish** — checkmate, stalemate, flagging on time, and *"dude logged"* when they resign,
+- **pops out** — a `⧉` button opens a picture-in-picture companion window (eval, numbered arrows, both
+  commentary lines, and a toggleable board drawn from the live position) that floats over any tab.
 
 > [!WARNING]
 > **fair play.** engine hints during a rated game against a human are cheating on chess.com and
@@ -131,6 +133,12 @@ the offscreen document is the trick: an extension page **can** set `coop`/`coep`
 a.c.a.s's github-pages gui can't have. the SAB ring carries the high-frequency eval frames so we never
 pay a structured-clone per `info` line; commands are one-per-move, so plain `postmessage` is fine there.
 
+**picture-in-picture.** the `⧉` companion window uses the modern **document picture-in-picture** api
+(chrome 116+) — a real dom window we draw into directly, rAF-throttled and allocation-free. a.c.a.s
+renders to a canvas, captures a `MediaStream`, pipes it through a `<video>`, and requests *video*-pip;
+that encode→decode→present path adds frames of latency we skip entirely. the pip board is drawn from
+the position avocado already tracks (unicode glyphs), so it needs none of chess.com's sprites to render.
+
 ---
 
 ## quickstart
@@ -154,7 +162,7 @@ open `lichess.org/analysis` or a chess.com bot game and start playing.
 
 ```
   src/shared/     board.ts (bitboards · 16-bit moves · single-alloc fen) · protocol.ts · theme.ts
-  src/content/    main.ts · capture.ts · overlay.ts · adapters/{lichess,chesscom}.ts · commentary/*
+  src/content/    main.ts · capture.ts · overlay.ts · pip.ts · adapters/{lichess,chesscom}.ts · commentary/*
   src/offscreen/  engine-host.ts · engine-worker.ts · ring-buffer.ts · uci-parse.ts
   src/background/ service-worker.ts
   src/popup/      popup.html · popup.ts

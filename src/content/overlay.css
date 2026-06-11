@@ -62,3 +62,27 @@
   content: '// ';
   color: #9399b2;
 }
+
+.avocado-popout {
+  position: fixed;
+  z-index: 2147483002;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  background: rgba(24, 24, 37, 0.94);
+  border: 1px solid #cba6f7;
+  color: #cba6f7;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(203, 166, 247, 0.4);
+  transition:
+    background 0.12s,
+    transform 0.12s;
+}
+.avocado-popout:hover {
+  background: #cba6f7;
+  color: #11111b;
+  transform: scale(1.08);
+}
