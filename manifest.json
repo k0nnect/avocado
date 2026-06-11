@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "avocado",
+  "version": "0.1.0",
+  "description": "local chess companion — eval bar, multi-pv hints, streamer commentary. 100% local engine.",
+  "minimum_chrome_version": "116",
+
+  "permissions": ["offscreen", "storage"],
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["*://*.chess.com/*", "*://lichess.org/*"],
+      "js": ["content/main.js"],
+      "css": ["content/overlay.css"],
+      "run_at": "document_start"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "avocado"
+  },
+
+  "cross_origin_embedder_policy": { "value": "require-corp" },
+  "cross_origin_opener_policy": { "value": "same-origin" },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+
+  "icons": {
+    "16": "icons/avocado16.png",
+    "48": "icons/avocado48.png",
+    "128": "icons/avocado128.png"
+  }
+}

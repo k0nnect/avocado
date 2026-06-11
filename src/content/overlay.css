@@ -1,0 +1,47 @@
+/* avocado overlay — lowercase violet. Injected as a content-script stylesheet.
+   Everything is fixed/absolute and pointer-events:none so we never intercept
+   the user's clicks or trigger the page's own layout. */
+
+.avocado-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 2147483000; /* above board, below browser chrome */
+}
+
+.avocado-ticker {
+  position: fixed;
+  pointer-events: none;
+  z-index: 2147483001;
+  max-width: 320px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(30, 24, 48, 0.92);
+  border: 1px solid #7c3aed;
+  color: #ede9fe;
+  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+  box-shadow: 0 6px 24px rgba(124, 58, 237, 0.35);
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  will-change: opacity, transform;
+}
+
+.avocado-ticker.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.avocado-ticker .avocado-tag {
+  color: #a78bfa;
+  font-size: 11px;
+  display: block;
+  margin-bottom: 2px;
+}

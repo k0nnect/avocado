@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #16121f;
+        --panel: #1e1830;
+        --primary: #7c3aed;
+        --mid: #a78bfa;
+        --soft: #c4b5fd;
+        --text: #ede9fe;
+        --dim: #9d8fc4;
+        --bad: #fb7185;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 14px 16px 18px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+        font-size: 13px;
+        text-transform: lowercase;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 2px;
+        color: var(--primary);
+        letter-spacing: 1px;
+      }
+      .sub {
+        color: var(--dim);
+        font-size: 11px;
+        margin-bottom: 14px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 7px 0;
+        border-top: 1px solid rgba(124, 58, 237, 0.18);
+      }
+      label {
+        flex: 1;
+        padding-right: 10px;
+      }
+      select,
+      input[type='number'] {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--primary);
+        border-radius: 6px;
+        padding: 3px 6px;
+        font-family: inherit;
+        font-size: 12px;
+        text-transform: lowercase;
+        width: 110px;
+      }
+      input[type='number'] {
+        width: 64px;
+      }
+      .switch {
+        position: relative;
+        width: 38px;
+        height: 20px;
+        flex: 0 0 auto;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        inset: 0;
+        background: var(--panel);
+        border: 1px solid var(--primary);
+        border-radius: 20px;
+        transition: 0.15s;
+      }
+      .slider::before {
+        content: '';
+        position: absolute;
+        height: 14px;
+        width: 14px;
+        left: 2px;
+        top: 2px;
+        background: var(--soft);
+        border-radius: 50%;
+        transition: 0.15s;
+      }
+      input:checked + .slider {
+        background: var(--primary);
+      }
+      input:checked + .slider::before {
+        transform: translateX(18px);
+        background: var(--text);
+      }
+      .warn {
+        margin-top: 12px;
+        padding: 8px 10px;
+        border: 1px solid var(--bad);
+        border-radius: 8px;
+        color: var(--bad);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      button {
+        flex: 1;
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--primary);
+        border-radius: 6px;
+        padding: 6px;
+        font-family: inherit;
+        font-size: 11px;
+        text-transform: lowercase;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--primary);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>avocado</h1>
+    <div class="sub">local engine · violet larp · 100% offline</div>
+
+    <div class="row">
+      <label>commentary</label>
+      <span class="switch"><input type="checkbox" id="commentary" /><span class="slider"></span></span>
+    </div>
+
+    <div class="row">
+      <label>hints only on hover</label>
+      <span class="switch"><input type="checkbox" id="hoverOnly" /><span class="slider"></span></span>
+    </div>
+
+    <div class="row">
+      <label>multi-pv lines</label>
+      <input type="number" id="multipv" min="1" max="4" />
+    </div>
+
+    <div class="row">
+      <label>hash (mb)</label>
+      <input type="number" id="hashMb" min="16" max="1024" step="16" />
+    </div>
+
+    <div class="row">
+      <label>engine build</label>
+      <select id="engineBuild">
+        <option value="stockfish-18-lite.js">sf18 lite · threaded (default)</option>
+        <option value="stockfish-18-lite-single.js">sf18 lite · single thread</option>
+        <option value="stockfish-18.js">sf18 full net · max (vendor first)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label>show arrows in live human games</label>
+      <span class="switch"
+        ><input type="checkbox" id="safeArrowsOverride" /><span class="slider"></span
+      ></span>
+    </div>
+
+    <div class="warn">
+      heads up: engine hints during a rated game against a human is cheating on chess.com and
+      lichess and can get your account banned. avocado keeps arrows off in live games unless you
+      flip this. eval bar + commentary always run.
+    </div>
+
+    <div class="actions">
+      <button id="export">export settings</button>
+      <button id="import">import settings</button>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
