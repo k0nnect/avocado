@@ -48,6 +48,12 @@ function emit(frame: string): void {
 // Reused eval frame — mutated and re-encoded per line, never reallocated.
 const frame: EvalFrame = { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, line: '' };
 
+// UCI ready handshake. Stockfish's wasm loads asynchronously; commands sent
+// before it's ready get dropped (this is the "engine never responds" race). We
+// hold host commands in a queue until we've seen `uciok` → `readyok`, then flush.
+let ready = false;
+const queue: string[] = [];
+
 self.onmessage = (ev: MessageEvent) => {
   const m = ev.data;
   if (m && m.type === 'init') {
@@ -57,36 +63,69 @@ self.onmessage = (ev: MessageEvent) => {
   if (typeof m === 'string') handleCommand(m);
 };
 
+let hwc = 4;
+let fallbackUrl = '';
+let triedFallback = false;
+
 function init(m: {
   evalSab: SharedArrayBuffer | null;
   evalCap: number;
   engineUrl: string;
+  fallbackUrl: string;
   hardwareConcurrency: number;
 }): void {
   evalWriter = m.evalSab ? new RingWriter({ sab: m.evalSab, capacity: m.evalCap } as RingLayout) : null;
-  // Single-threaded builds ignore the Threads option; for the threaded build use
-  // cores−1. The host already picked the right build for this isolation context.
-  threads = m.engineUrl.includes('single') ? 1 : Math.max(1, m.hardwareConcurrency - 1);
+  hwc = m.hardwareConcurrency;
+  fallbackUrl = m.fallbackUrl;
+  spawn(m.engineUrl);
+}
 
-  // Spawn the vendored Stockfish. It is a CLASSIC Emscripten worker (UCI over
-  // postMessage); it locates its own .wasm relative to its URL and (for the
-  // threaded build) spawns pthreads, which need crossOriginIsolation.
+/** (Re)spawn the Stockfish sub-worker for `url` and start the UCI handshake. */
+function spawn(url: string): void {
+  // Single-threaded builds ignore the Threads option; for threaded use cores−1.
+  threads = url.includes('single') ? 1 : Math.max(1, hwc - 1);
+  ready = false;
+
   try {
-    engine = new Worker(m.engineUrl);
+    engine = new Worker(url);
   } catch (err) {
     log(`FAILED to construct engine worker: ${(err as Error)?.message ?? err}`);
+    tryFallback(url);
     return;
   }
   engine.onmessage = (e: MessageEvent) =>
     onEngineLine(typeof e.data === 'string' ? e.data : (e.data?.data ?? ''));
   engine.onerror = (e) => {
-    log(`stockfish error: ${e.message}`);
+    log(`stockfish error: ${e.message ?? 'unknown'}`);
+    tryFallback(url);
   };
 
-  log(`engine worker up · ${m.engineUrl.split('/').pop()} · threads=${threads}`);
-  // Boot UCI at FULL STRENGTH — no Skill Level / UCI_LimitStrength, ever.
-  send('uci');
-  applyConfig();
+  log(`engine starting · ${url.split('/').pop()} · threads=${threads}`);
+  send('uci'); // → uciok → applyConfig → readyok → flush queue
+
+  // If it doesn't reach readyok, the build can't run here (e.g. pthreads/SAB
+  // unavailable) — fall back to the rock-solid single-threaded build.
+  self.setTimeout(() => {
+    if (!ready) tryFallback(url);
+  }, 8000);
+}
+
+function tryFallback(failedUrl: string): void {
+  if (ready || triedFallback || !fallbackUrl || failedUrl.includes('single')) {
+    if (!ready && !fallbackUrl) log('engine FAILED and no fallback available');
+    return;
+  }
+  triedFallback = true;
+  log('engine did not start — falling back to single-threaded build');
+  // NOTE: keep evalWriter as-is. The SAB ring is the engine-worker↔host
+  // transport, independent of which Stockfish build runs; only the stockfish
+  // sub-worker changes here.
+  try {
+    engine.terminate();
+  } catch {
+    /* ignore */
+  }
+  spawn(fallbackUrl);
 }
 
 /** Emit a debug log line to the host (host + content surface it). */
@@ -113,6 +152,22 @@ function applyConfig(): void {
 }
 
 function handleCommand(s: string): void {
+  if (!ready) {
+    // Engine still booting — keep only the latest position (they supersede each
+    // other) plus any analyse/stop, so the queue can't grow unbounded.
+    if (opOf(s) === Op.Position) {
+      const i = queue.findIndex((q) => opOf(q) === Op.Position);
+      if (i >= 0) queue[i] = s;
+      else queue.push(s);
+    } else {
+      queue.push(s);
+    }
+    return;
+  }
+  handleCommandNow(s);
+}
+
+function handleCommandNow(s: string): void {
   switch (opOf(s)) {
     case Op.Position: {
       const p = decodePosition(s);
@@ -146,6 +201,21 @@ function handleCommand(s: string): void {
 // Parsing lives in uci-parse.ts (pure + unit-tested against real SF18 output).
 function onEngineLine(line: string): void {
   if (!line) return;
+
+  // handshake: uciok → configure; readyok → ready, flush queued commands
+  if (line.startsWith('uciok')) {
+    applyConfig(); // sends setoptions + isready (→ readyok)
+    return;
+  }
+  if (line.startsWith('readyok')) {
+    if (!ready) {
+      ready = true;
+      log(`engine ready · ${queue.length} queued`);
+      for (const q of queue) handleCommandNow(q);
+      queue.length = 0;
+    }
+    return;
+  }
 
   const best = parseBestMove(line);
   if (best !== null) {

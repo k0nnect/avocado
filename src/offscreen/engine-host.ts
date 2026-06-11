@@ -45,12 +45,17 @@ async function chosenEngineUrl(): Promise<string> {
 
 const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
 
+const fallbackUrl = new URL(`../vendor/stockfish/${SINGLE_ENGINE}`, import.meta.url).href;
+
 chosenEngineUrl().then((engineUrl) => {
   worker.postMessage({
     type: 'init',
     evalSab: EVAL_RING ? EVAL_RING.sab : null,
     evalCap: EVAL_RING ? EVAL_RING.capacity : 0,
     engineUrl,
+    // always single-threaded — used if the preferred (threaded) build can't
+    // initialize (e.g. pthreads fail in this context). Guarantees an engine.
+    fallbackUrl,
     hardwareConcurrency: navigator.hardwareConcurrency || 4,
   });
 });
@@ -85,15 +90,15 @@ function forward(frame: string): void {
   }
 }
 
+// Catch eval frames on BOTH channels. The engine-worker emits via exactly one
+// (the SAB ring when isolated, else postMessage), but listening on both makes
+// the host robust to whichever path the worker uses — no double-delivery.
+worker.onmessage = (e: MessageEvent) => {
+  if (typeof e.data === 'string') forward(e.data);
+};
 if (evalReader) {
-  // SAB ring: drain on a short timer (engine info lines arrive far slower).
   const reader = evalReader;
   setInterval(() => {
     for (let s = reader.read(); s !== null; s = reader.read()) forward(s);
   }, 8);
-} else {
-  // postMessage fallback: eval frames arrive as worker messages.
-  worker.onmessage = (e: MessageEvent) => {
-    if (typeof e.data === 'string') forward(e.data);
-  };
 }
