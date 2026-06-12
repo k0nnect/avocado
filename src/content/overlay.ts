@@ -1,4 +1,5 @@
-// avocado overlay — canvas eval bar + ranked multi-pv arrows + commentary ticker.
+// avocado overlay — canvas eval bar + ranked multi-pv arrows + status pill.
+// (Commentary renders exclusively in the picture-in-picture window — pip.ts.)
 //
 // Performance contract:
 //  - ONE fixed-position canvas with pointer-events:none, so it never intercepts
@@ -6,8 +7,6 @@
 //  - All drawing happens inside a single requestAnimationFrame, only when a
 //    dirty flag is set. No per-frame layout reads: the board rect is cached and
 //    refreshed only on resize/scroll (passive) via ResizeObserver.
-//  - The ticker is a tiny DOM node updated with textContent + a CSS class
-//    (compositor-only opacity/transform), never innerHTML in a loop.
 
 import type { SiteAdapter } from './adapters/types.ts';
 import type { EvalFrame } from '../shared/protocol.ts';
@@ -23,12 +22,8 @@ interface ArrowPV {
 export class Overlay {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  // Two tickers: the user's commentary sits below their side of the board, the
-  // enemy's above theirs. Which is which depends on board orientation.
-  private tickerBottom: HTMLDivElement; // user side
-  private tickerTop: HTMLDivElement; // enemy side
-  private timerBottom = 0;
-  private timerTop = 0;
+  // Commentary renders ONLY in the picture-in-picture window (pip.ts) — the
+  // on-page overlay stays minimal: eval bar, arrows, status pill, pop-out.
   private popoutBtn: HTMLButtonElement;
   private statusEl: HTMLDivElement;
   private statusTimer = 0;
@@ -56,10 +51,6 @@ export class Overlay {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'avocado-canvas';
     this.ctx = this.canvas.getContext('2d')!;
-    this.tickerBottom = document.createElement('div');
-    this.tickerBottom.className = 'avocado-ticker';
-    this.tickerTop = document.createElement('div');
-    this.tickerTop.className = 'avocado-ticker avocado-ticker-enemy';
     this.popoutBtn = document.createElement('button');
     this.popoutBtn.className = 'avocado-popout';
     this.popoutBtn.textContent = '⧉';
@@ -86,8 +77,6 @@ export class Overlay {
 
   mount(): void {
     document.body.appendChild(this.canvas);
-    document.body.appendChild(this.tickerBottom);
-    document.body.appendChild(this.tickerTop);
     document.body.appendChild(this.popoutBtn);
     document.body.appendChild(this.statusEl);
     this.resizeObs.observe(this.boardEl);
@@ -101,8 +90,6 @@ export class Overlay {
     window.removeEventListener('scroll', this.refreshRect, { capture: true } as any);
     window.removeEventListener('resize', this.refreshRect);
     this.canvas.remove();
-    this.tickerBottom.remove();
-    this.tickerTop.remove();
     this.popoutBtn.remove();
     this.statusEl.remove();
   }
@@ -134,15 +121,6 @@ export class Overlay {
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
-    // Tickers: user below the board, enemy above it. Right-aligned to the board's
-    // right edge so they clear the player avatar + name, which sit on the left.
-    const rightPx = Math.max(0, window.innerWidth - this.rect.right);
-    this.tickerBottom.style.left = 'auto';
-    this.tickerBottom.style.right = `${rightPx}px`;
-    this.tickerBottom.style.top = `${this.rect.bottom + 8}px`;
-    this.tickerTop.style.left = 'auto';
-    this.tickerTop.style.right = `${rightPx}px`;
-    this.tickerTop.style.top = `${this.rect.top - 8}px`; // CSS anchors it by its bottom edge
     // pop-out button: top-right corner just outside the board
     this.popoutBtn.style.left = `${this.rect.right - 30}px`;
     this.popoutBtn.style.top = `${this.rect.top - 26}px`;
@@ -200,30 +178,6 @@ export class Overlay {
   setHoverOnly(v: boolean): void {
     this.hoverOnly = v;
     this.markDirty();
-  }
-
-  /**
-   * Show a commentary line. `side` picks the ticker: 'user' (below the board) or
-   * 'enemy' (above it), so each player's moves get commentary on their own side.
-   */
-  pushCommentary(text: string, tag: string | undefined, side: 'user' | 'enemy'): void {
-    const el = side === 'enemy' ? this.tickerTop : this.tickerBottom;
-    el.textContent = '';
-    if (tag) {
-      const t = document.createElement('span');
-      t.className = 'avocado-tag';
-      t.textContent = tag;
-      el.appendChild(t);
-    }
-    el.appendChild(document.createTextNode(text));
-    el.classList.add('show');
-    if (side === 'enemy') {
-      if (this.timerTop) clearTimeout(this.timerTop);
-      this.timerTop = window.setTimeout(() => el.classList.remove('show'), 4200);
-    } else {
-      if (this.timerBottom) clearTimeout(this.timerBottom);
-      this.timerBottom = window.setTimeout(() => el.classList.remove('show'), 4200);
-    }
   }
 
   // ---- render loop ----

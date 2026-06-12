@@ -1,0 +1,2 @@
+[      57ms] [LOG] avocado engine: engine starting · stockfish-18-lite-single.js · threads=1 @ http://127.0.0.1:8740/offscreen/engine-worker.js:0
+[     163ms] [LOG] avocado engine: engine ready · 0 queued @ http://127.0.0.1:8740/offscreen/engine-worker.js:0

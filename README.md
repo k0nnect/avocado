@@ -18,7 +18,7 @@
 *a low-latency chess overlay that watches your board, thinks with a fully-local stockfish 18,*
 *and talks like a hype streamer — rebuilt from [a.c.a.s] to run multi-threaded where a.c.a.s can't.*
 
-`#7c3aed` · `#a78bfa` · `#c4b5fd` · all lowercase, always
+`#cba6f7` · `#b4befe` · `#dabffc` · mauve / lilac, all lowercase, always
 
 </div>
 
@@ -28,13 +28,17 @@
 
 avocado is a manifest v3 chrome extension. open a game on lichess or chess.com and it:
 
-- **sees** every move the instant the board changes (no polling) — and ignores mere clicks/selections,
-- **thinks** with stockfish 18 — multi-threaded, simd, full nnue — running entirely on your machine,
+- **sees** every move the instant the board changes (no polling) — on chess.com it reads the board's
+  own game state directly (`wc-chess-board.game.getFEN()`, ~0.7µs, always exact: right side-to-move,
+  castling, en-passant), on lichess a zero-alloc piece scan — and ignores mere clicks/selections,
+- **thinks** with stockfish 18 — multi-threaded, simd, full nnue, entirely on your machine — searching
+  to a depth ceiling and then *stopping* (a static position never pins your cores), and respawning
+  itself if the wasm ever traps, so it can't get stuck,
 - **shows** a mauve eval bar and ranked best-move arrows numbered by priority (**#1** best, **#2**, **#3**),
   plus a translucent opponent-reply guess — and never draws a move that isn't legal on the board,
 - **talks** — *"wait, is that a juicer??"*, *"oh no, my queen!!"*, *"absolute positional dominance, buddy"* —
-  driven by the real eval swing and tactical motifs, with your moves' commentary on your side of the board
-  and the opponent's on theirs,
+  driven by the real eval swing and tactical motifs. commentary lives **exclusively in the pip window**
+  (your moves on one line, the opponent's on the other) so the site itself stays clean,
 - **calls the finish** — checkmate, stalemate, flagging on time, and *"dude logged"* when they resign,
 - **pops out** — a `⧉` button opens a picture-in-picture companion window (eval, numbered arrows, both
   commentary lines, and a toggleable board drawn from the live position) that floats over any tab.
@@ -115,16 +119,16 @@ engine builds are popup-selectable:
 
 ```
   lichess / chess.com page  (content script, isolated world)
-    capture.ts   ─ mutationobserver → uint8array(64) diff → 16-bit move → fen
-    overlay.ts   ─ canvas eval bar / ranked multi-pv arrows / ticker (raf only)
-    commentary   ─ eval delta + bitboard motifs → priority state machine → violet ticker
+    capture.ts   ─ mutationobserver → wc-chess-board.game.getFEN() (chess.com) │ mailbox diff (lichess) → fen
+    overlay.ts   ─ canvas eval bar / ranked multi-pv arrows / status pill (raf only)
+    commentary   ─ eval delta + bitboard motifs → priority state machine → pip window
           │  chrome.runtime port — packed strings, never json
   service-worker.ts   (router + offscreen lifecycle)
           │  port relay
   offscreen document  (crossoriginisolated via coop/coep manifest keys)
     engine-host.ts    ─ drains the eval ring, relays frames
           │  postmessage (commands) ··· SAB ring buffer (eval frames)
-    engine-worker.ts  ─ bridges uci, parses info lines zero-copy (uci-parse.ts)
+    engine-worker.ts  ─ bridges uci (serialized `go depth N`, self-stops + auto-respawns), parses info zero-copy
           └─ stockfish-18-lite.js   (N threads + simd, net embedded)
 ```
 
@@ -132,6 +136,12 @@ the offscreen document is the trick: an extension page **can** set `coop`/`coep`
 `crossoriginisolated`, which is exactly what unlocks `sharedarraybuffer` + threaded wasm — the thing
 a.c.a.s's github-pages gui can't have. the SAB ring carries the high-frequency eval frames so we never
 pay a structured-clone per `info` line; commands are one-per-move, so plain `postmessage` is fine there.
+
+**never stuck.** stockfish traps the wasm if you hand it a new `position` mid-search, so the worker
+*serializes*: a new move only `stop`s the running search, and the next `position`/`go` waits for the
+`bestmove`. each search runs `go depth N` (not `go infinite`) so it ends itself and a quiet board drops
+to idle. and if the engine ever crashes anyway, it respawns and re-analyses the live position — so it
+recovers instead of hanging on *"engine waking…"*, even joining an already-active game mid-blitz.
 
 **picture-in-picture.** the `⧉` companion window uses the modern **document picture-in-picture** api
 (chrome 116+) — a real dom window we draw into directly, rAF-throttled and allocation-free. a.c.a.s
@@ -147,7 +157,7 @@ the position avocado already tracks (unicode glyphs), so it needs none of chess.
 npm install
 npm run vendor      # one-time: pull stockfish 18 wasm into vendor/stockfish/
 npm run build       # → dist/
-npm test            # 41 unit tests (board, protocol, ring, commentary, real-engine-output parser)
+npm test            # 57 unit tests (board, protocol, ring, commentary, side-to-move, real-engine-output parser)
 npm run bench       # the avocado vs a.c.a.s speed demo above
 ```
 

@@ -13,7 +13,7 @@
 import type { SiteAdapter, GameEndKind } from './types.ts';
 import { readGameOver } from './game-result.ts';
 import type { GameContext } from '../../shared/protocol.ts';
-import { makePiece, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
+import { makePiece, pieceColor, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
 
 const ROLE_TYPE: Record<string, PieceType> = {
   p: PieceType.Pawn,
@@ -32,6 +32,12 @@ export class ChesscomAdapter implements SiteAdapter {
   }
 
   findBoard(): HTMLElement | null {
+    // Pages that are never a live game we should annotate — home/news/etc. embed
+    // widget boards (daily puzzle, article diagrams) that would otherwise light
+    // up the engine + commentary while just browsing.
+    if (/^\/$|^\/(home|today|news|article|articles|blog|forum|member|club|stats)(\/|$)/.test(location.pathname)) {
+      return null;
+    }
     // Try the most specific selectors first (querySelector with a comma-list
     // returns document-order, not selector-order, so we iterate to keep
     // priority). A.C.A.S targets `#board-layout-chessboard > .board`; the modern
@@ -48,6 +54,7 @@ export class ChesscomAdapter implements SiteAdapter {
     for (const sel of selectors) {
       const el = document.querySelector<HTMLElement>(sel);
       if (!el) continue;
+      if (el.getBoundingClientRect().width < 240) continue; // widget/thumbnail, not the game
       if (el.querySelector('.piece')) return el; // ideal: already holds pieces
       fallback ??= el; // a board-like element whose pieces haven't rendered yet
     }
@@ -68,8 +75,40 @@ export class ChesscomAdapter implements SiteAdapter {
     return board.classList.contains('flipped') ? BLACK : WHITE;
   }
 
+  sideToMove(board: HTMLElement, mailbox: Uint8Array): number {
+    // chess.com marks the last move with two `.highlight` squares (from + to).
+    // Only trust a clean two-highlight state — a selected piece adds a third
+    // `.highlight`, which would make the destination ambiguous; bail to -1 then
+    // and let the diff loop establish side-to-move on the next real move.
+    const hls = board.querySelectorAll<HTMLElement>('.highlight');
+    if (hls.length !== 2) return -1;
+    for (let i = 0; i < hls.length; i++) {
+      const sq = squareFromClass(hls[i]!.className);
+      if (sq < 0) continue;
+      const pc = mailbox[sq]!;
+      if (pc !== EMPTY) return pieceColor(pc) ^ 1; // mover sits here → other side to move
+    }
+    return -1;
+  }
+
   boardRect(board: HTMLElement): DOMRect {
     return board.getBoundingClientRect();
+  }
+
+  liveFen(board: HTMLElement): string | null {
+    // chess.com's board web component holds the real game state. Reading its FEN
+    // directly is exact (correct side-to-move/castling/ep) and ~0.7µs — far
+    // cheaper and safer than scanning pieces and inferring whose move it is.
+    try {
+      const g =
+        (board as unknown as { game?: { getFEN?: () => string } }).game ??
+        (document.querySelector('wc-chess-board') as unknown as { game?: { getFEN?: () => string } })
+          ?.game;
+      const f = g?.getFEN?.();
+      return typeof f === 'string' && f.length >= 10 ? f : null;
+    } catch {
+      return null;
+    }
   }
 
   scanBoard(board: HTMLElement, out: Uint8Array): boolean {
@@ -79,6 +118,11 @@ export class ChesscomAdapter implements SiteAdapter {
 
     for (let i = 0; i < pieces.length; i++) {
       const cls = pieces[i]!.className;
+      // A piece being dragged (hovering over other pieces/squares) makes the
+      // board unreadable until it's actually placed — abort the scan. (The
+      // primary liveFen path is already immune: game.getFEN() only changes on
+      // a committed move. This guards the DOM-scan fallback.)
+      if (cls.indexOf('dragging') !== -1) return false;
       // find the "wp"/"bn" colour+role token and the "square-XY" token by scanning
       let color = -1;
       let type = 0;
@@ -146,6 +190,16 @@ export class ChesscomAdapter implements SiteAdapter {
       '.header-title-component',
     ]);
   }
+}
+
+/** Square index (a1=0 … h8=63) from a chess.com `square-XY` class token, or -1. */
+function squareFromClass(cls: string): number {
+  const i = cls.indexOf('square-');
+  if (i < 0) return -1;
+  const file = cls.charCodeAt(i + 7) - 49; // '1' → 0
+  const rank = cls.charCodeAt(i + 8) - 49;
+  if (file < 0 || file > 7 || rank < 0 || rank > 7) return -1;
+  return rank * 8 + file;
 }
 
 /** Parse "1:23", "0:09.3", "12:05", "1:02:30" → ms. -1 on failure. */

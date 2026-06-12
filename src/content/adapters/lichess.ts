@@ -13,7 +13,7 @@
 import type { SiteAdapter, GameEndKind } from './types.ts';
 import { readGameOver } from './game-result.ts';
 import type { GameContext } from '../../shared/protocol.ts';
-import { makePiece, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
+import { makePiece, pieceColor, WHITE, BLACK, PieceType, EMPTY } from '../../shared/board.ts';
 
 const ROLE_TYPE: Record<string, PieceType> = {
   pawn: PieceType.Pawn,
@@ -32,7 +32,19 @@ export class LichessAdapter implements SiteAdapter {
   }
 
   findBoard(): HTMLElement | null {
-    return document.querySelector<HTMLElement>('cg-board');
+    // lichess renders cg-boards all over pages that AREN'T your game: TV and
+    // "current games" thumbnails on the homepage, sidebar minis, broadcast
+    // strips. Those stream live moves, so naively taking the first cg-board
+    // lights up the engine + commentary while just browsing. Only accept a
+    // board that isn't a thumbnail and renders at real, playable size.
+    const boards = document.querySelectorAll<HTMLElement>('cg-board');
+    for (let i = 0; i < boards.length; i++) {
+      const b = boards[i]!;
+      if (b.closest('.mini-board, .mini-game')) continue; // homepage/sidebar thumbnail
+      if (b.getBoundingClientRect().width < 240) continue; // too small to be the game
+      return b;
+    }
+    return null;
   }
 
   observeTarget(board: HTMLElement): { target: Node; options: MutationObserverInit } {
@@ -55,6 +67,25 @@ export class LichessAdapter implements SiteAdapter {
     return wrap?.classList.contains('orientation-black') ? BLACK : WHITE;
   }
 
+  sideToMove(board: HTMLElement, mailbox: Uint8Array): number {
+    // Chessground marks the last move with two `square.last-move` overlays,
+    // positioned by the same translate() math as pieces. The occupied one is the
+    // destination; the piece there is the side that just moved.
+    const sqs = board.querySelectorAll<HTMLElement>('square.last-move');
+    if (sqs.length !== 2) return -1;
+    const rect = board.getBoundingClientRect();
+    if (rect.width === 0) return -1;
+    const edge = rect.width / 8;
+    const flipped = this.orientation(board) === BLACK;
+    for (let i = 0; i < sqs.length; i++) {
+      const sq = squareFromTransform(sqs[i]!.style.transform, edge, flipped);
+      if (sq < 0) continue;
+      const pc = mailbox[sq]!;
+      if (pc !== EMPTY) return pieceColor(pc) ^ 1; // mover sits here → other side to move
+    }
+    return -1;
+  }
+
   boardRect(board: HTMLElement): DOMRect {
     return board.getBoundingClientRect();
   }
@@ -73,7 +104,12 @@ export class LichessAdapter implements SiteAdapter {
       const el = pieces[i]!;
       // className is "white pawn" (sometimes with trailing "dragging" etc.)
       const cls = el.className;
-      // ghost/dragging pieces during a drag should be ignored
+      // A piece mid-drag follows the CURSOR's translate — hovering it over
+      // another piece/square would read it at that square and produce a garbage
+      // position. The board is unreadable until the piece is actually PLACED:
+      // abort the whole scan (capture skips this tick; the drop emits the move).
+      if (cls.indexOf('dragging') !== -1) return false;
+      // the ghost marking the origin square during a drag is not a real piece
       if (cls.indexOf('ghost') !== -1) continue;
 
       const color = cls.indexOf('white') !== -1 ? WHITE : cls.indexOf('black') !== -1 ? BLACK : -1;
@@ -137,6 +173,24 @@ export class LichessAdapter implements SiteAdapter {
     // lichess shows the outcome in .status (with .result) under the move list.
     return readGameOver(['.result-wrap .status', '.status', '.game__status']);
   }
+}
+
+/** Square index (a1=0 … h8=63) from a chessground `translate(Xpx,Ypx)`, or -1. */
+function squareFromTransform(tf: string, edge: number, flipped: boolean): number {
+  const open = tf.indexOf('(');
+  if (open === -1) return -1;
+  const comma = tf.indexOf(',', open);
+  const px = parseFloat(tf.slice(open + 1));
+  const py = comma === -1 ? 0 : parseFloat(tf.slice(comma + 1));
+  let file = Math.round(px / edge);
+  let rankFromTop = Math.round(py / edge);
+  if (flipped) {
+    file = 7 - file;
+    rankFromTop = 7 - rankFromTop;
+  }
+  const rank = 7 - rankFromTop;
+  if (file < 0 || file > 7 || rank < 0 || rank > 7) return -1;
+  return rank * 8 + file;
 }
 
 /** Parse "1:23", "0:09.3", "12:05" → milliseconds. Returns -1 on failure. */

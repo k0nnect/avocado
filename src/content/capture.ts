@@ -49,6 +49,9 @@ export class CapturePipeline {
   private dirty = false;
   private synced = false;
   private lastClock: [number, number] = [-1, -1];
+  // Last FEN emitted via the authoritative-FEN path (adapter.liveFen). Clicks and
+  // hovers don't change it, so comparing against it ignores them with no flicker.
+  private lastFen = '';
 
   private safety = 0;
 
@@ -119,11 +122,22 @@ export class CapturePipeline {
    * spectate, or a bot game waiting on your move), not only after the first move.
    */
   private resync(): void {
+    // Preferred path: the site hands us its authoritative FEN (chess.com).
+    const lf = this.adapter.liveFen?.(this.boardEl);
+    if (lf != null) {
+      this.lastFen = ''; // force the next processFen to emit as a fresh baseline
+      this.synced = true;
+      this.processFen(lf);
+      return;
+    }
     if (!this.adapter.scanBoard(this.boardEl, this.cur)) return;
-    this.board.loadMailbox(this.cur);
-    // We don't know side-to-move reliably from a static scan; assume white if it
-    // looks like the start, otherwise leave as-is. The engine tolerates either;
-    // the diff loop corrects side-to-move as moves flow.
+    // Derive side-to-move from the site's last-move highlight (O(1)). Guessing
+    // wrong on an already-active game makes the FEN illegal whenever the side
+    // not-to-move is in check → Stockfish returns `bestmove (none)`, no eval, and
+    // the overlay hangs on "engine waking…". -1 means "can't tell" (fresh start,
+    // ambiguous) → default white, which is correct for an actual start position.
+    const stm = this.adapter.sideToMove?.(this.boardEl, this.cur) ?? -1;
+    this.board.loadMailbox(this.cur, stm === -1 ? WHITE : stm);
     this.board.prev.set(this.cur);
     this.synced = true;
     this.sampleClocks();
@@ -140,7 +154,58 @@ export class CapturePipeline {
     });
   }
 
+  /**
+   * Authoritative-FEN path. `fen` is the site's own exact game state, so it's
+   * always legal and carries the correct side-to-move — emit it directly. The
+   * move (for commentary) is derived by diffing the previous position's mailbox
+   * against this one; if the diff isn't a clean single move (castle/ep/promo) we
+   * still emit the position with move = -1 (eval + arrows, no callout).
+   */
+  private processFen(fen: string): void {
+    if (fen.length < 10 || fen === this.lastFen) return; // unchanged → ignore clicks/hovers
+    const first = this.lastFen === '';
+    this.board.loadMailboxFen(fen); // fills squares + sideToMove + castling/ep
+    const mover = this.board.sideToMove ^ 1; // the side that just moved
+
+    let move = -1;
+    let capturedType = 0;
+    let capturedValue = 0;
+    let moveTimeMs = -1;
+    let clockMs = -1;
+    if (first) {
+      this.sampleClocks();
+    } else {
+      diffMailbox(this.board.prev, this.board.squares, mover, this.diff);
+      move = this.diff.move;
+      capturedType = this.diff.capturedType;
+      capturedValue = capturedType ? PIECE_VALUE[capturedType]! : 0;
+      moveTimeMs = this.sampleClocks(mover);
+      clockMs = this.lastClock[mover];
+    }
+    this.board.prev.set(this.board.squares);
+    this.lastFen = fen;
+
+    this.sink({
+      fen,
+      move: first ? -1 : move,
+      capturedType,
+      capturedValue,
+      mover,
+      clockMs,
+      moveTimeMs,
+    });
+  }
+
   private process(): void {
+    // Authoritative-FEN path (chess.com): read the game's own FEN and emit when
+    // it changes. Exact side-to-move (no illegal-FEN "engine waking" hang), and
+    // clicks/hovers leave the FEN unchanged so they never cause flicker.
+    const lf = this.adapter.liveFen?.(this.boardEl);
+    if (lf != null) {
+      this.processFen(lf);
+      return;
+    }
+
     if (!this.adapter.scanBoard(this.boardEl, this.cur)) return;
     if (!this.synced) {
       this.resync();

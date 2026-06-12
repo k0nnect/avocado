@@ -182,17 +182,26 @@ class Avocado {
     return new Promise((resolve) => {
       const found = this.adapter.findBoard();
       if (found) return resolve(found);
-      const obs = new MutationObserver(() => {
-        const b = this.adapter.findBoard();
-        if (b) {
-          obs.disconnect();
-          resolve(b);
-        }
-      });
-      obs.observe(document.documentElement, { childList: true, subtree: true });
-      // give up quietly after 30s (page may not be a game)
-      setTimeout(() => {
+      // findBoard rejects boards that haven't been SIZED yet (a real board is
+      // ≥240px; thumbnails never are). Sizing happens via style changes that a
+      // childList observer never sees — so back the observer with a light poll,
+      // or a board inserted at 0px would only be picked up at the 30s fallback.
+      let timer = 0;
+      let poll = 0;
+      const settle = (b: HTMLElement | null): void => {
+        if (!b) return;
         obs.disconnect();
+        clearInterval(poll);
+        clearTimeout(timer);
+        resolve(b);
+      };
+      const obs = new MutationObserver(() => settle(this.adapter.findBoard()));
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      poll = self.setInterval(() => settle(this.adapter.findBoard()), 250);
+      // give up quietly after 30s (page may not be a game)
+      timer = self.setTimeout(() => {
+        obs.disconnect();
+        clearInterval(poll);
         resolve(this.adapter.findBoard());
       }, 30000);
     });
@@ -354,13 +363,12 @@ class Avocado {
       performance.now(),
     );
     if (out) {
-      const side = this.sideOf(e.mover);
-      this.overlay.pushCommentary(out.text, out.tag, side);
-      if (this.pip.isOpen) this.pip.pushCommentary(out.text, out.tag, side);
+      // commentary renders ONLY in the pip window — nothing on the site itself
+      if (this.pip.isOpen) this.pip.pushCommentary(out.text, out.tag, this.sideOf(e.mover));
     }
   }
 
-  /** Which ticker a move's commentary belongs to: the mover's own side. */
+  /** Which pip commentary line a move belongs to: the mover's own side. */
   private sideOf(mover: number): 'user' | 'enemy' {
     // orientation: 0 = white on bottom (user is white), 1 = black on bottom.
     const userColor = this.adapter.orientation(this.boardEl);
@@ -389,8 +397,8 @@ class Avocado {
     if (!callout) return;
     dbg('game over:', kind);
     // "dude logged" lands on the opponent's side; the rest on the user's side.
+    // pip-only, like all commentary.
     const side = kind === 'resign' ? 'enemy' : 'user';
-    this.overlay.pushCommentary(callout.text, callout.tag, side);
     if (this.pip.isOpen) this.pip.pushCommentary(callout.text, callout.tag, side);
   }
 }

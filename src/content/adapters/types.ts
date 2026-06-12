@@ -31,8 +31,34 @@ export interface SiteAdapter {
    */
   scanBoard(board: HTMLElement, out: Uint8Array): boolean;
 
+  /**
+   * If the site exposes its own authoritative game state, return the full FEN
+   * (placement + side-to-move + castling + en-passant). This is preferred over
+   * scanBoard because it's exact and trivially cheap — chess.com's
+   * `<wc-chess-board>` answers `.game.getFEN()` in ~0.7µs and never produces an
+   * illegal position, so it sidesteps the side-to-move guessing that otherwise
+   * hangs the engine on "engine waking…". Return null if unavailable (the
+   * capture pipeline then falls back to scanBoard).
+   */
+  liveFen?(board: HTMLElement): string | null;
+
   /** 0 = white pieces on the bottom, 1 = black on the bottom (board flipped). */
   orientation(board: HTMLElement): number;
+
+  /**
+   * Best-effort side-to-move (0 = white, 1 = black) for a STATIC board avocado
+   * has just attached to — read from the site's last-move highlight: the
+   * highlighted square that still holds a piece is the move's destination, so
+   * that piece's colour is the side that just moved, and the other side is to
+   * move. Returns -1 when it can't tell (no last move yet, ambiguous highlights).
+   *
+   * This matters because guessing the wrong side-to-move yields an ILLEGAL FEN
+   * whenever the side-not-to-move is in check — Stockfish then returns
+   * `bestmove (none)` with no eval, so the overlay hangs on "engine waking…".
+   * O(1): inspects only the highlight elements. `mailbox` is the freshly-scanned
+   * position, used to find the occupied (destination) highlight.
+   */
+  sideToMove?(board: HTMLElement, mailbox: Uint8Array): number;
 
   /** Where the user sits in this game — drives safe-mode arrow gating. */
   gameContext(): GameContext;

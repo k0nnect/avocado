@@ -68,7 +68,10 @@ let port: chrome.runtime.Port;
 function connectPort(): void {
   port = chrome.runtime.connect({ name: 'avocado-offscreen' });
   port.onMessage.addListener((msg: { tabId: number; frame: string }) => {
-    activeTabId = msg.tabId;
+    // Only a POSITION command retargets the eval stream. Config/stop frames
+    // (e.g. a background tab's watchdog) must not steal another tab's evals —
+    // the engine serves whichever board most recently asked for analysis.
+    if (msg.frame.charCodeAt(0) === 112 /* 'p' */) activeTabId = msg.tabId;
     worker.postMessage(msg.frame); // command frame → engine worker
   });
   port.onDisconnect.addListener(() => {
