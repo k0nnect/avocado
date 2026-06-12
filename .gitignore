@@ -1,6 +1,21 @@
+# Dependencies & build output
 node_modules/
 dist/
-.DS_Store
+
+# Test/bench artifacts
 bench/.gen/
+coverage/
+
+# Local tool state (debug sessions, per-machine settings)
+.playwright-mcp/
+.claude/settings.local.json
+
+# Secrets — never commit these
+.env
+.env.*
+
+# OS noise
+.DS_Store
+
 # A.C.A.S source kept locally as read-only reference; it has its own upstream
 A.C.A.S/

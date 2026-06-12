@@ -1,3 +1,0 @@
-[      43ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8740/favicon.ico:0
-[      43ms] [LOG] avocado engine: engine starting · stockfish-18-lite-single.js · threads=1 @ http://127.0.0.1:8740/offscreen/engine-worker.js:0
-[     171ms] [LOG] avocado engine: engine ready · 0 queued @ http://127.0.0.1:8740/offscreen/engine-worker.js:0
