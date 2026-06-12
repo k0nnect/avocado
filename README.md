@@ -16,9 +16,9 @@
 **`local chess companion · live commentary engine · 100% offline`**
 
 *a low-latency chess overlay that watches your board, thinks with a fully-local stockfish 18,*
-*and talks like a hype streamer — rebuilt from [a.c.a.s] to run multi-threaded where a.c.a.s can't.*
+* — rebuilt from [a.c.a.s] to run multi-threaded where a.c.a.s can't.*
 
-`#cba6f7` · `#b4befe` · `#dabffc` · mauve / lilac, all lowercase, always
+`#cba6f7` · `#b4befe` · `#dabffc` · mauve / lilac, always
 
 </div>
 
@@ -39,7 +39,7 @@ avocado is a manifest v3 chrome extension. open a game on lichess or chess.com a
 - **talks** — *"wait, is that a juicer??"*, *"oh no, my queen!!"*, *"absolute positional dominance, buddy"* —
   driven by the real eval swing and tactical motifs. commentary lives **exclusively in the pip window**
   (your moves on one line, the opponent's on the other) so the site itself stays clean,
-- **calls the finish** — checkmate, stalemate, flagging on time, and *"dude logged"* when they resign,
+- **calls the finish** — checkmate, stalemate, flagging on time.
 - **pops out** — a `⧉` button opens a picture-in-picture companion window (eval, numbered arrows, both
   commentary lines, and a toggleable board drawn from the live position) that floats over any tab.
 
