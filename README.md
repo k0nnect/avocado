@@ -18,7 +18,7 @@
 *a low-latency chess overlay that watches your board, thinks with a fully-local stockfish 18,*
 *and talks like a hype streamer — rebuilt from [a.c.a.s] to run multi-threaded where a.c.a.s can't.*
 
-`#cba6f7` · `#b4befe` · `#dabffc` · mauve / lilac, all lowercase, always
+`#cba6f7` · `#b4befe` · `#dabffc`
 
 </div>
 
@@ -54,7 +54,7 @@ avocado is a manifest v3 chrome extension. open a game on lichess or chess.com a
 ## why it's faster than a.c.a.s
 
 a.c.a.s is the inspiration and it's great — but its architecture caps it. avocado clears that ceiling
-on every axis. run the demo yourself: **`npm run bench`** (lowercase mauve, of course).
+on every axis. run the demo yourself: **`npm run bench`**.
 
 ```
   board → fen  (per move)
