@@ -11,7 +11,7 @@ const REAL = [
 ];
 
 function frame(): EvalFrame {
-  return { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, line: '' };
+  return { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, nps: 0, line: '' };
 }
 
 describe('parseInfoLine on real Stockfish 18 output', () => {
@@ -22,6 +22,7 @@ describe('parseInfoLine on real Stockfish 18 output', () => {
     expect(f.mate).toBe(false);
     expect(f.score).toBe(-31);
     expect(f.wdl).toEqual([7, 928, 65]);
+    expect(f.nps).toBe(1551690);
     expect(f.line.split(' ')[0]).toBe('e7e6');
   });
 
@@ -50,6 +51,7 @@ describe('parseInfoLine on real Stockfish 18 output', () => {
     expect(f.mate).toBe(true);
     expect(f.score).toBe(-2);
     expect(f.wdl).toBeNull();
+    expect(f.nps).toBe(0); // absent in this line → 0
   });
 
   it('rejects info lines without a pv', () => {

@@ -48,6 +48,7 @@ describe('eval frame', () => {
       mate: false,
       score: 37,
       wdl: [512, 460, 28],
+      nps: 1551690,
       line: 'e2e4 e7e5 g1f3 b8c6',
     };
     const dec = decodeEval(encodeEval(f));
@@ -62,6 +63,7 @@ describe('eval frame', () => {
       mate: true,
       score: -4,
       wdl: null,
+      nps: 0,
       line: 'h2h4 g5h4',
     };
     const dec = decodeEval(encodeEval(f));
@@ -69,7 +71,15 @@ describe('eval frame', () => {
   });
 
   it('handles a single-move pv', () => {
-    const f: EvalFrame = { depth: 10, multipv: 1, mate: false, score: 0, wdl: null, line: 'd2d4' };
+    const f: EvalFrame = {
+      depth: 10,
+      multipv: 1,
+      mate: false,
+      score: 0,
+      wdl: null,
+      nps: 0,
+      line: 'd2d4',
+    };
     expect(decodeEval(encodeEval(f))).toEqual(f);
   });
 });
