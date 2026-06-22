@@ -26,6 +26,8 @@ const GLYPH_W = ['', '♙', '♘', '♗', '♖', '♕', '♔'];
 const GLYPH_B = ['', '♟', '♞', '♝', '♜', '♛', '♚'];
 
 const BOARD_PX = 296;
+const SPARK_W = 296;
+const SPARK_H = 30;
 
 export class PipController {
   private win: Window | null = null;
@@ -36,6 +38,10 @@ export class PipController {
   private enemyEl: HTMLElement | null = null;
   private userEl: HTMLElement | null = null;
   private evalEl: HTMLElement | null = null;
+  private pvEl: HTMLElement | null = null;
+  private statsEl: HTMLElement | null = null;
+  private sparkCanvas: HTMLCanvasElement | null = null;
+  private sparkCtx: CanvasRenderingContext2D | null = null;
   private showBoard = true;
   private dirty = false;
   private rafId = 0;
@@ -46,6 +52,12 @@ export class PipController {
   private opp: PipArrow | null = null;
   private orientation = 0;
   private evalText = '';
+
+  // detail readouts (best line, stat line, eval-trend sparkline)
+  private pvTextStr = '';
+  private statsTextStr = '';
+  private history: readonly number[] = [];
+  private liveEval = 0;
 
   get isOpen(): boolean {
     return !!this.win;
@@ -63,7 +75,7 @@ export class PipController {
       console.warn('avocado: Document Picture-in-Picture not supported in this browser');
       return;
     }
-    this.win = await dpip.requestWindow({ width: 320, height: 470 });
+    this.win = await dpip.requestWindow({ width: 320, height: 540 });
     this.doc = this.win.document;
     this.build();
     this.win.addEventListener('pagehide', () => this.onClosed());
@@ -80,7 +92,9 @@ export class PipController {
     this.rafId = 0;
     this.win = this.doc = null;
     this.canvas = this.ctx = null;
+    this.sparkCanvas = this.sparkCtx = null;
     this.boardWrap = this.enemyEl = this.userEl = this.evalEl = null;
+    this.pvEl = this.statsEl = null;
   }
 
   private build(): void {
@@ -128,7 +142,22 @@ export class PipController {
     user.className = 'avo-line avo-user';
     this.userEl = user;
 
-    d.body.append(header, enemy, wrap, user);
+    // detail block: best line (light SAN), eval-trend sparkline, engine stat line.
+    const detail = d.createElement('div');
+    detail.className = 'avo-detail';
+    const pv = d.createElement('div');
+    pv.className = 'avo-pv';
+    this.pvEl = pv;
+    const spark = d.createElement('canvas');
+    spark.className = 'avo-spark';
+    this.sparkCanvas = spark;
+    this.sparkCtx = spark.getContext('2d');
+    const stats = d.createElement('div');
+    stats.className = 'avo-stats';
+    this.statsEl = stats;
+    detail.append(pv, spark, stats);
+
+    d.body.append(header, enemy, wrap, detail, user);
   }
 
   // ---- inputs from the pipeline ----
@@ -170,6 +199,21 @@ export class PipController {
     this.scheduleRender();
   }
 
+  /**
+   * Update the detail readouts: best line as light SAN, the engine stat line, and
+   * the eval-trend sparkline. `history` is the live reference to the caller's
+   * white-POV trend array (read-only here) + `liveEval` as the provisional last
+   * point. Cheap; only called when the pip is open.
+   */
+  setDetail(pvText: string, statsText: string, history: readonly number[], liveEval: number): void {
+    if (!this.win) return;
+    this.pvTextStr = pvText;
+    this.statsTextStr = statsText;
+    this.history = history;
+    this.liveEval = liveEval;
+    this.scheduleRender();
+  }
+
   pushCommentary(text: string, tag: string | undefined, side: 'user' | 'enemy'): void {
     const el = side === 'enemy' ? this.enemyEl : this.userEl;
     if (!el) return;
@@ -194,6 +238,10 @@ export class PipController {
 
   private render(): void {
     if (this.evalEl) this.evalEl.textContent = this.evalText;
+    // detail rows render regardless of whether the board is shown
+    if (this.pvEl) this.pvEl.textContent = this.pvTextStr ? `line · ${this.pvTextStr}` : '';
+    if (this.statsEl) this.statsEl.textContent = this.statsTextStr;
+    this.drawSparkline();
     if (!this.showBoard || !this.ctx || !this.canvas || !this.win) return;
 
     const dpr = this.win.devicePixelRatio || 1;
@@ -235,6 +283,62 @@ export class PipController {
       const a = this.arrows[i]!;
       this.drawArrow(a.from, a.to, PV_COLORS[a.rank] ?? VIOLET.soft, edge, 1 - a.rank * 0.22, a.rank + 1, flipped);
     }
+  }
+
+  /** Eval-trend sparkline: committed points + the live value, white-POV. Higher =
+   * better for White, mapped with the same logistic squash as the eval bar. */
+  private drawSparkline(): void {
+    const cv = this.sparkCanvas;
+    const ctx = this.sparkCtx;
+    const win = this.win;
+    if (!cv || !ctx || !win) return;
+
+    const dpr = win.devicePixelRatio || 1;
+    if (cv.width !== Math.round(SPARK_W * dpr)) {
+      cv.width = Math.round(SPARK_W * dpr);
+      cv.height = Math.round(SPARK_H * dpr);
+      cv.style.width = `${SPARK_W}px`;
+      cv.style.height = `${SPARK_H}px`;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, SPARK_W, SPARK_H);
+
+    // equal-eval midline
+    ctx.strokeStyle = 'rgba(218,191,252,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, SPARK_H / 2);
+    ctx.lineTo(SPARK_W, SPARK_H / 2);
+    ctx.stroke();
+
+    const n = this.history.length + 1; // committed points + the live one
+    if (n < 2) return; // a single point isn't a trend
+
+    const pad = 2;
+    const innerW = SPARK_W - pad * 2;
+    const innerH = SPARK_H - pad * 2;
+    const x = (i: number): number => pad + (i / (n - 1)) * innerW;
+    const y = (cp: number): number => pad + (1 - 1 / (1 + Math.exp(-cp / 320))) * innerH;
+
+    ctx.strokeStyle = '#cba6f7';
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < this.history.length; i++) {
+      const px = x(i);
+      const py = y(this.history[i]!);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    const li = this.history.length;
+    ctx.lineTo(x(li), y(this.liveEval));
+    ctx.stroke();
+
+    // dot on the live point
+    ctx.fillStyle = '#dabffc';
+    ctx.beginPath();
+    ctx.arc(x(li), y(this.liveEval), 2, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private center(sq: number, edge: number, flipped: boolean): [number, number] {
@@ -327,4 +431,12 @@ const PIP_CSS = `
   .avo-line.show { background: rgba(24,24,37,0.94); }
   .avo-enemy.show { border-color: #b4befe; }
   .avo-user.show { border-color: #cba6f7; }
+  .avo-detail { margin: 8px 2px 2px; }
+  .avo-pv {
+    min-height: 16px; color: #cdd6f4; font-variant-numeric: tabular-nums;
+    word-break: break-word; line-height: 1.4;
+  }
+  .avo-pv:empty { display: none; }
+  .avo-spark { display: block; margin: 6px 0 4px; opacity: 0.9; }
+  .avo-stats { color: #9399b2; font-variant-numeric: tabular-nums; }
 `;

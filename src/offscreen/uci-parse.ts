@@ -59,6 +59,10 @@ export function parseInfoLine(line: string, out: EvalFrame): EvalFrame | null {
     out.wdl = null;
   }
 
+  // optional "nps 1551690" — a rate stat, surfaced for the readout. 0 if absent.
+  const nps = readIntAfter(line, ' nps ');
+  out.nps = nps < 0 ? 0 : nps;
+
   out.line = line.slice(pvIdx + 4);
   return out;
 }

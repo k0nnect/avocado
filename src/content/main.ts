@@ -17,6 +17,7 @@ import { PipController } from './pip.ts';
 import { Commentary } from './commentary/commentary.ts';
 import { detectMotifs } from './commentary/motifs.ts';
 import { Board, WHITE, isGeometricallyLegal, algebraicToSquare } from '../shared/board.ts';
+import { pvToText } from '../shared/pv-text.ts';
 import {
   encodePosition,
   encodeAnalyse,
@@ -49,6 +50,10 @@ const DEFAULTS: Settings = {
 const COMMENTARY_DEPTH = 12; // speak once the best line is this deep (fast + accurate)
 const DECISIVE_DEPTH = 6; // ...but react to a forced mate even sooner
 
+const PV_PLIES = 10; // how many plies of the best line to show as text in the pip
+const MATE_TREND_CP = 10000; // mate mapped to a large cp so the trend pins to the edge
+const MAX_TREND = 80; // cap on trend points kept (memory + sparkline density)
+
 const ADAPTERS: SiteAdapter[] = [new LichessAdapter(), new ChesscomAdapter()];
 
 // Flip on with `chrome.storage.local.set({ debug: true })` then reload the page
@@ -79,6 +84,14 @@ class Avocado {
   private spokenForMove = false;
   private baselineSeeded = false; // commentary baseline taken for this position
   private pvFrames = new Map<number, EvalFrame>(); // multipv → latest frame
+
+  // eval-trend readout (pip): one white-POV point per move, plus the running eval
+  // of the position currently on the board.
+  private evalHistory: number[] = [];
+  private currentEvalWhite: number | null = null;
+  // pv-text cache: rebuild the light-SAN line only when the engine's pv changes.
+  private lastPvLine = '';
+  private lastPvText = '';
 
   async boot(): Promise<void> {
     const adapter = ADAPTERS.find((a) => a.matches());
@@ -209,6 +222,18 @@ class Avocado {
 
   /** A move landed on the board → analyse the new position. */
   private onMove(e: CaptureEvent): void {
+    // trend: a real move was played FROM the position we were analysing, so the
+    // eval we'd settled on is the value at which that move was made — record it.
+    // A baseline (move < 0 = new game / position jump) restarts the trend.
+    if (e.move < 0) {
+      this.evalHistory.length = 0;
+    } else if (this.currentEvalWhite !== null) {
+      this.evalHistory.push(this.currentEvalWhite);
+      if (this.evalHistory.length > MAX_TREND) this.evalHistory.shift();
+    }
+    this.currentEvalWhite = null;
+    this.lastPvLine = ''; // force the pv-text to rebuild for the new position
+
     this.pending = e;
     this.spokenForMove = false;
     this.baselineSeeded = false;
@@ -298,6 +323,11 @@ class Avocado {
     const stm = this.pending.mover ^ 1;
     const stmIsWhite = stm === WHITE;
 
+    // track the running white-POV eval of the live position so onMove can snapshot
+    // it into the trend, and the pip can draw it as the provisional last point.
+    const best1 = this.pvFrames.get(1);
+    if (best1) this.currentEvalWhite = whitePovCp(best1, stmIsWhite);
+
     // refresh the overlay with the current set of PV lines. The eval bar and
     // commentary always update (so detection stays visible); ARROWS are gated on
     // the best move being legal on the live board — that's what suppresses an
@@ -316,6 +346,14 @@ class Avocado {
         this.board.squares,
         this.adapter.orientation(this.boardEl),
         evalText(best, stmIsWhite),
+      );
+      // detail readouts: best line as light SAN, a depth · w/d/l · nps stat line,
+      // and the eval-trend sparkline (committed points + the live value).
+      this.pip.setDetail(
+        this.pvText(best),
+        statsText(best, stmIsWhite),
+        this.evalHistory,
+        this.currentEvalWhite ?? 0,
       );
     }
 
@@ -375,6 +413,18 @@ class Avocado {
     return mover === userColor ? 'user' : 'enemy';
   }
 
+  /**
+   * Light-SAN render of the engine's best line for the pip readout. Cached on the
+   * raw pv string so the scratch-board walk runs only when the line changes, not
+   * on every depth increment. `this.board` already mirrors the analysed position.
+   */
+  private pvText(best: EvalFrame): string {
+    if (best.line === this.lastPvLine) return this.lastPvText;
+    this.lastPvLine = best.line;
+    this.lastPvText = pvToText(this.board.toFen(), best.line, PV_PLIES);
+    return this.lastPvText;
+  }
+
   // ---- game-over watch (resign / flag / mate / stalemate) ----
   private gameOverObs: MutationObserver | null = null;
   private gameOverTimer = 0;
@@ -412,6 +462,35 @@ function evalText(best: EvalFrame, stmIsWhite: boolean): string {
   }
   const cp = (best.score * sign) / 100;
   return `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}`;
+}
+
+/** White-POV eval in centipawns; a forced mate pins to ±MATE_TREND_CP. */
+function whitePovCp(f: EvalFrame, stmIsWhite: boolean): number {
+  const sign = stmIsWhite ? 1 : -1;
+  if (f.mate) return f.score * sign >= 0 ? MATE_TREND_CP : -MATE_TREND_CP;
+  return f.score * sign;
+}
+
+/** Compact engine stat line, white-POV: "depth 28 · w/d/l 62/30/8 · 1.5 mn/s". */
+function statsText(best: EvalFrame, stmIsWhite: boolean): string {
+  let s = `depth ${best.depth}`;
+  if (best.wdl) {
+    const [w, d, l] = best.wdl;
+    const [ww, dd, ll] = stmIsWhite ? [w, d, l] : [l, d, w];
+    s += ` · w/d/l ${permillePct(ww)}/${permillePct(dd)}/${permillePct(ll)}`;
+  }
+  if (best.nps > 0) s += ` · ${formatNps(best.nps)}`;
+  return s;
+}
+
+function permillePct(p: number): number {
+  return Math.round(p / 10);
+}
+
+function formatNps(nps: number): string {
+  if (nps >= 1_000_000) return `${(nps / 1_000_000).toFixed(1)} mn/s`;
+  if (nps >= 1_000) return `${Math.round(nps / 1_000)} kn/s`;
+  return `${nps} n/s`;
 }
 
 // content script runs at document_start; kick off once the DOM is usable.

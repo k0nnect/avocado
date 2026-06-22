@@ -102,7 +102,7 @@ function emit(frame: string): void {
 }
 
 // Reused eval frame — mutated and re-encoded per line, never reallocated.
-const frame: EvalFrame = { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, line: '' };
+const frame: EvalFrame = { depth: 0, multipv: 1, mate: false, score: 0, wdl: null, nps: 0, line: '' };
 
 // UCI ready handshake. Stockfish's wasm loads asynchronously; commands sent
 // before it's ready get dropped (this is the "engine never responds" race). We

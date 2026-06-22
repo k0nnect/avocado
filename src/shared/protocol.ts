@@ -13,9 +13,10 @@
 //   position frame  →  "p:<fen>:<context>:<safeArrows0|1>"
 //   analyse control →  "a:<multipv>:<hashMb>:<threads>"   (engine config push)
 //   stop            →  "x"
-//   eval frame      →  "e:<depth>:<multipv>:<scoreType>:<score>:<wdl>:<line>"
+//   eval frame      →  "e:<depth>:<multipv>:<scoreType>:<score>:<wdl>:<nps>:<line>"
 //                        scoreType = 'c' (centipawns) | 'm' (mate in N, signed)
 //                        wdl = "w/d/l" permille or "-" if unavailable
+//                        nps = nodes/sec (0 if the engine didn't report it)
 //                        line = space-joined UCI moves (pv), first = best move
 //   bestmove        →  "b:<uci>"
 //   ready / id      →  "r"     (engine booted & configured)
@@ -45,6 +46,7 @@ export interface EvalFrame {
   mate: boolean;
   score: number; // centipawns (mate=false) or signed mate distance (mate=true)
   wdl: readonly [number, number, number] | null; // win/draw/loss permille
+  nps: number; // nodes/sec (0 if the engine didn't report it)
   line: string; // space-joined UCI pv, line.split(' ')[0] = best move
 }
 
@@ -80,7 +82,7 @@ export function encodeStop(): string {
 export function encodeEval(f: EvalFrame): string {
   const st = f.mate ? 'm' : 'c';
   const wdl = f.wdl ? `${f.wdl[0]}/${f.wdl[1]}/${f.wdl[2]}` : '-';
-  return `e:${f.depth}:${f.multipv}:${st}:${f.score}:${wdl}:${f.line}`;
+  return `e:${f.depth}:${f.multipv}:${st}:${f.score}:${wdl}:${f.nps}:${f.line}`;
 }
 
 export function encodeBestMove(uci: string): string {
@@ -118,7 +120,7 @@ export function decodeAnalyse(s: string): { multipv: number; hashMb: number; thr
  * raw slice (no split) so the caller can read line.split(' ')[0] lazily.
  */
 export function decodeEval(s: string): EvalFrame {
-  // e:depth:multipv:st:score:wdl:line
+  // e:depth:multipv:st:score:wdl:nps:line
   let i = 2;
   const i2 = s.indexOf(':', i);
   const depth = parseInt(s.slice(i, i2), 10);
@@ -133,7 +135,10 @@ export function decodeEval(s: string): EvalFrame {
   i = i5 + 1;
   const i6 = s.indexOf(':', i);
   const wdlRaw = s.slice(i, i6);
-  const line = s.slice(i6 + 1);
+  i = i6 + 1;
+  const i7 = s.indexOf(':', i);
+  const nps = parseInt(s.slice(i, i7), 10);
+  const line = s.slice(i7 + 1);
   let wdl: [number, number, number] | null = null;
   if (wdlRaw !== '-') {
     const p = wdlRaw.indexOf('/');
@@ -144,7 +149,7 @@ export function decodeEval(s: string): EvalFrame {
       parseInt(wdlRaw.slice(q + 1), 10),
     ];
   }
-  return { depth, multipv, mate: st === 'm', score, wdl, line };
+  return { depth, multipv, mate: st === 'm', score, wdl, nps, line };
 }
 
 export function decodeBestMove(s: string): string {
