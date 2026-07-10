@@ -42,6 +42,11 @@ avocado is a manifest v3 chrome extension. open a game on lichess or chess.com a
 - **calls the finish** — checkmate, stalemate, flagging on time.
 - **pops out** — a `⧉` button opens a picture-in-picture companion window (eval, numbered arrows, both
   commentary lines, and a toggleable board drawn from the live position) that floats over any tab.
+- **goes dark** — a **stealth / screenshare-proof** toggle hides *everything* avocado draws on the
+  chess tab (eval bar, arrows, status pill, and the `⧉` button); all analysis moves to the pip
+  window, which tab- and window-shares don't capture (a full-screen share still does). with the
+  button hidden, open the companion with the **`alt + a`** hotkey on the board (macOS: **`⌃ a`**
+  or **`⌥ a`**).
 
 > [!WARNING]
 > **fair play.** engine hints during a rated game against a human are cheating on chess.com and

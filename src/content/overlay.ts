@@ -38,6 +38,7 @@ export class Overlay {
   private oppArrow: ArrowPV | null = null;
   private showArrows = false; // safe-mode gate
   private hoverOnly = false; // "moves on demand"
+  private stealth = false; // screenshare-proof: hide ALL on-page ui (pip only)
   private evalCp = 0;
   private evalMate = 0; // signed mate distance, 0 = none
   private wdl: readonly [number, number, number] | null = null;
@@ -180,6 +181,22 @@ export class Overlay {
     this.markDirty();
   }
 
+  /**
+   * Stealth / screenshare-proof mode: hide EVERYTHING avocado draws on the page
+   * (eval bar, arrows, status pill, pop-out button). The engine keeps running and
+   * all analysis moves to the picture-in-picture window, which tab/window
+   * screen-shares don't capture. The PiP is opened via the Alt+A hotkey (main.ts)
+   * since the pop-out button is hidden here.
+   */
+  setStealth(v: boolean): void {
+    this.stealth = v;
+    const d = v ? 'none' : '';
+    this.canvas.style.display = d;
+    this.popoutBtn.style.display = d;
+    this.statusEl.style.display = d;
+    this.markDirty();
+  }
+
   // ---- render loop ----
 
   private markDirty(): void {
@@ -196,6 +213,7 @@ export class Overlay {
   }
 
   private render(): void {
+    if (this.stealth) return; // nothing on the page in screenshare-proof mode
     const ctx = this.ctx;
     const gutter = 18;
     const edge = this.rect.width / 8;

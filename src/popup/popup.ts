@@ -8,6 +8,7 @@ interface Settings {
   hashMb: number;
   engineBuild: string;
   safeArrowsOverride: boolean;
+  stealth: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -17,6 +18,7 @@ const DEFAULTS: Settings = {
   hashMb: 256,
   engineBuild: 'stockfish-18-lite.js',
   safeArrowsOverride: false,
+  stealth: false,
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -28,6 +30,7 @@ const els = {
   hashMb: $('hashMb') as HTMLInputElement,
   engineBuild: $('engineBuild') as HTMLSelectElement,
   safeArrowsOverride: $('safeArrowsOverride') as HTMLInputElement,
+  stealth: $('stealth') as HTMLInputElement,
 };
 const multipvOut = $('multipvOut') as HTMLOutputElement;
 const hashMbOut = $('hashMbOut') as HTMLOutputElement;
@@ -46,6 +49,7 @@ async function load(): Promise<void> {
   els.hashMb.value = String(s.hashMb);
   els.engineBuild.value = s.engineBuild;
   els.safeArrowsOverride.checked = s.safeArrowsOverride;
+  els.stealth.checked = s.stealth;
   syncOutputs();
 }
 
@@ -57,6 +61,7 @@ function read(): Settings {
     hashMb: clamp(parseInt(els.hashMb.value, 10), 16, 1024, 256),
     engineBuild: els.engineBuild.value,
     safeArrowsOverride: els.safeArrowsOverride.checked,
+    stealth: els.stealth.checked,
   };
 }
 

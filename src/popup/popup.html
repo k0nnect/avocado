@@ -213,6 +213,18 @@
         background: rgba(243, 139, 168, 0.06);
       }
 
+      .hint {
+        margin: 6px 12px 0;
+        color: var(--dim);
+        font-size: 10px;
+        line-height: 1.45;
+        text-transform: lowercase;
+      }
+      .hint b {
+        color: var(--lilac);
+        font-weight: 600;
+      }
+
       .actions {
         display: flex;
         gap: 8px;
@@ -296,6 +308,17 @@
         <label class="switch danger"
           ><input type="checkbox" id="safeArrowsOverride" /><span class="slider"></span
         ></label>
+      </div>
+
+      <h2>stealth</h2>
+      <div class="row">
+        <label class="lbl">screenshare-proof (pip only)</label>
+        <label class="switch"><input type="checkbox" id="stealth" /><span class="slider"></span></label>
+      </div>
+      <div class="hint">
+        hides everything on the chess tab — eval, arrows, and the ⧉ button. open the companion
+        with <b>alt + a</b> (macos: <b>⌃ a</b> or <b>⌥ a</b>) on the board. the pip window stays
+        out of tab / window screen-shares.
       </div>
     </div>
 

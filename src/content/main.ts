@@ -36,6 +36,7 @@ interface Settings {
   hashMb: number;
   engineBuild: string;
   commentary: boolean;
+  stealth: boolean; // screenshare-proof: hide all on-page ui, pip only
 }
 
 const DEFAULTS: Settings = {
@@ -45,7 +46,25 @@ const DEFAULTS: Settings = {
   hashMb: 256,
   engineBuild: 'stockfish-18-lite.js',
   commentary: true,
+  stealth: false,
 };
+
+// Hotkey to open/close the pip companion — needed in stealth mode, where the
+// on-page pop-out button is hidden. A real keypress is a valid user gesture, so
+// documentPictureInPicture.requestWindow() is allowed (a popup click is not).
+const IS_MAC = /mac/i.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+
+/**
+ * Is this the "toggle pip" chord? The physical A key (layout-independent via
+ * e.code) plus:
+ *   - macOS   → Control+A (⌃A is free there — Mac select-all is ⌘A) or Option+A,
+ *   - others  → Alt+A (Ctrl+A is select-all on win/linux, so it's excluded).
+ * Meta/⌘ is never accepted, so ⌘A (select-all) is left alone.
+ */
+function isPipHotkey(e: KeyboardEvent): boolean {
+  if (e.code !== 'KeyA' || e.metaKey) return false;
+  return IS_MAC ? e.altKey || e.ctrlKey : e.altKey && !e.ctrlKey;
+}
 
 const COMMENTARY_DEPTH = 12; // speak once the best line is this deep (fast + accurate)
 const DECISIVE_DEPTH = 6; // ...but react to a forced mate even sooner
@@ -117,7 +136,10 @@ class Avocado {
     this.overlay = new Overlay(this.adapter, this.boardEl);
     this.overlay.mount();
     this.overlay.setHoverOnly(this.settings.hoverOnly);
+    this.overlay.setStealth(this.settings.stealth); // before setStatus: no flash
     this.overlay.onPopout(() => void this.pip.toggle());
+    // Alt+A opens/closes the pip (the only way when stealth hides the ⧉ button).
+    window.addEventListener('keydown', (e) => this.onHotkey(e), true);
     this.overlay.setStatus('starting engine…', true);
 
     // push engine config (multipv/hash/threads — threads decided in the worker)
@@ -184,10 +206,21 @@ class Avocado {
       (this.settings as any)[k] = changes[k]!.newValue;
       if (k === 'multipv' || k === 'hashMb') reanalyse = true;
       if (k === 'hoverOnly') this.overlay?.setHoverOnly(this.settings.hoverOnly);
+      if (k === 'stealth') this.overlay?.setStealth(this.settings.stealth);
     }
     if (reanalyse) {
       this.send(encodeAnalyse(this.settings.multipv, this.settings.hashMb, 0));
     }
+  }
+
+  /** Alt+A (⌃A / ⌥A on macOS) toggles the pip — the stealth-mode entry point. */
+  private onHotkey(e: KeyboardEvent): void {
+    if (!isPipHotkey(e)) return;
+    // don't hijack the key while the user is typing (site chat, search, etc.)
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return;
+    e.preventDefault();
+    void this.pip.toggle();
   }
 
   /** Poll the DOM (via a short-lived observer) until the board appears. */
